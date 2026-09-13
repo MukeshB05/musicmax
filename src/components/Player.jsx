@@ -13,10 +13,7 @@ import {
 
 import { IoShareSocial } from "react-icons/io5";
 
-import {
-  PiShuffleBold,
-  PiSpeakerLowFill,
-} from "react-icons/pi";
+import { PiShuffleBold } from "react-icons/pi";
 
 import {
   LuRepeat,
@@ -31,6 +28,7 @@ import {
 } from "react-icons/fa";
 
 import { MdDownload } from "react-icons/md";
+
 import { CiMaximize1 } from "react-icons/ci";
 
 import {
@@ -39,10 +37,13 @@ import {
 } from "react-icons/md";
 
 import { Link } from "react-router-dom";
+
 import he from "he";
 
 import MusicContext from "../context/MusicContext";
+
 import ArtistItems from "./Items/ArtistItems";
+
 import SongGrid from "./SongGrid";
 
 import {
@@ -97,7 +98,10 @@ const getImage = (song, coverImage) => {
     );
   }
 
-  if (song?.image && typeof song.image === "object") {
+  if (
+    song?.image &&
+    typeof song.image === "object"
+  ) {
     return (
       song.image?.url ||
       song.image?.link ||
@@ -127,25 +131,21 @@ const getSongId = (song) => {
 
 /* =========================================================
    NORMALISE LYRIC TIME
-   Supports seconds and milliseconds
+   Supports seconds + milliseconds
 ========================================================= */
 
 const getLyricTime = (line) => {
   const rawTime = Number(
     line?.time ??
-    line?.startTime ??
-    line?.start ??
-    0
+      line?.startTime ??
+      line?.start ??
+      0
   );
 
   if (!Number.isFinite(rawTime)) {
     return null;
   }
 
-  /*
-    Normal lyrics normally use seconds.
-    Some APIs return milliseconds.
-  */
   return rawTime > 10000
     ? rawTime / 1000
     : rawTime;
@@ -175,23 +175,6 @@ const Player = () => {
      STATE
   ======================================================= */
 
-  const [volume, setVolume] = useState(() => {
-    try {
-      const savedVolume = Number(
-        localStorage.getItem("volume")
-      );
-
-      if (Number.isFinite(savedVolume)) {
-        return Math.min(
-          100,
-          Math.max(0, savedVolume)
-        );
-      }
-    } catch {}
-
-    return 100;
-  });
-
   const [isMaximized, setIsMaximized] =
     useState(false);
 
@@ -214,7 +197,9 @@ const Player = () => {
     useState(() => {
       try {
         const data = JSON.parse(
-          localStorage.getItem("likedSongs") || "[]"
+          localStorage.getItem(
+            "likedSongs"
+          ) || "[]"
         );
 
         return Array.isArray(data)
@@ -232,9 +217,9 @@ const Player = () => {
   const scrollRef = useRef(null);
 
   /*
-    IMPORTANT:
-    This ref belongs ONLY to the lyrics
-    scroll container.
+    ONLY the lyrics box uses this ref.
+    The page itself will never be scrolled
+    by the lyric auto-scroll code.
   */
   const lyricContainerRef = useRef(null);
 
@@ -242,13 +227,15 @@ const Player = () => {
      AUDIO
   ======================================================= */
 
-  const audio = currentSong?.audio || null;
+  const audio =
+    currentSong?.audio || null;
 
   /* =======================================================
      SONG DATA
   ======================================================= */
 
-  const songId = getSongId(currentSong);
+  const songId =
+    getSongId(currentSong);
 
   const duration =
     Number(currentSong?.duration) > 0
@@ -261,11 +248,18 @@ const Player = () => {
           100,
           Math.max(
             0,
-            (currentTime / duration) * 100
+            (currentTime / duration) *
+              100
           )
         )
       : 0;
 
+  /*
+    Album artwork used for:
+    1. Player background
+    2. Main cover
+    3. Mini player
+  */
   const artwork = getImage(
     currentSong,
     coverImage
@@ -372,15 +366,15 @@ const Player = () => {
     setCurrentTime(0);
     setAudioDuration(0);
 
-    /*
-      Reset lyrics scroll position when
-      changing songs.
-    */
-    if (lyricContainerRef.current) {
-      lyricContainerRef.current.scrollTo({
-        top: 0,
-        behavior: "auto",
-      });
+    if (
+      lyricContainerRef.current
+    ) {
+      lyricContainerRef.current.scrollTo(
+        {
+          top: 0,
+          behavior: "auto",
+        }
+      );
     }
   }, [songId]);
 
@@ -396,6 +390,7 @@ const Player = () => {
     ) {
       setCurrentTime(0);
       setAudioDuration(0);
+
       return undefined;
     }
 
@@ -418,7 +413,9 @@ const Player = () => {
         Number.isFinite(audioLength) &&
         audioLength > 0
       ) {
-        setAudioDuration(audioLength);
+        setAudioDuration(
+          audioLength
+        );
       }
     };
 
@@ -431,13 +428,19 @@ const Player = () => {
         Number.isFinite(audioLength) &&
         audioLength > 0
       ) {
-        setAudioDuration(audioLength);
+        setAudioDuration(
+          audioLength
+        );
       }
 
       updateTime();
     };
 
     const ended = () => {
+      /*
+        When repeat one is enabled,
+        HTMLAudioElement.loop handles it.
+      */
       if (repeatMode !== "one") {
         nextSong?.();
       }
@@ -493,7 +496,7 @@ const Player = () => {
   ]);
 
   /* =======================================================
-     AUDIO VOLUME / REPEAT
+     REPEAT
   ======================================================= */
 
   useEffect(() => {
@@ -502,13 +505,11 @@ const Player = () => {
     }
 
     try {
-      audio.volume = volume / 100;
       audio.loop =
         repeatMode === "one";
     } catch {}
   }, [
     audio,
-    volume,
     repeatMode,
   ]);
 
@@ -520,6 +521,7 @@ const Player = () => {
     if (!songId) {
       setDetail(null);
       setSuggestions([]);
+
       return undefined;
     }
 
@@ -659,6 +661,30 @@ const Player = () => {
         error
       );
     }
+
+    return () => {
+      try {
+        navigator.mediaSession.setActionHandler(
+          "play",
+          null
+        );
+
+        navigator.mediaSession.setActionHandler(
+          "pause",
+          null
+        );
+
+        navigator.mediaSession.setActionHandler(
+          "previoustrack",
+          null
+        );
+
+        navigator.mediaSession.setActionHandler(
+          "nexttrack",
+          null
+        );
+      } catch {}
+    };
   }, [
     currentSong,
     songName,
@@ -674,14 +700,11 @@ const Player = () => {
   /* =======================================================
      LYRIC AUTO SCROLL
      
-     IMPORTANT FIX:
-     Scrolls ONLY the lyrics container.
-     
-     It does NOT use:
-       container.children[index]
-     
-     because the lyric items can be inside
-     another wrapper.
+     IMPORTANT:
+     - Only lyricContainerRef is scrolled
+     - Page/window is NOT scrolled
+     - Active lyric is centered
+     - Smooth scrolling
   ======================================================= */
 
   useEffect(() => {
@@ -708,18 +731,21 @@ const Player = () => {
         }
 
         /*
-          Get positions relative to the
+          Get the exact position of the
           lyrics container.
         */
         const containerRect =
           container.getBoundingClientRect();
 
+        /*
+          Get active lyric position.
+        */
         const activeRect =
           activeElement.getBoundingClientRect();
 
         /*
-          Current lyric position inside
-          scrollable container.
+          Convert active lyric position
+          into scroll-container coordinates.
         */
         const relativeTop =
           activeRect.top -
@@ -727,7 +753,7 @@ const Player = () => {
           container.scrollTop;
 
         /*
-          Calculate exact center position.
+          Center active lyric.
         */
         const targetScroll =
           relativeTop -
@@ -735,14 +761,16 @@ const Player = () => {
           activeElement.clientHeight / 2;
 
         /*
-          IMPORTANT:
-          scrollTo is called on the lyrics
-          container, not window/body.
+          ONLY scroll the lyrics box.
         */
         container.scrollTo({
           top: Math.max(
             0,
-            targetScroll
+            Math.min(
+              targetScroll,
+              container.scrollHeight -
+                container.clientHeight
+            )
           ),
           behavior: "smooth",
         });
@@ -814,35 +842,6 @@ const Player = () => {
   };
 
   /* =======================================================
-     VOLUME
-  ======================================================= */
-
-  const changeVolume = (event) => {
-    const value = Math.min(
-      100,
-      Math.max(
-        0,
-        Number(event.target.value)
-      )
-    );
-
-    setVolume(value);
-
-    try {
-      localStorage.setItem(
-        "volume",
-        String(value)
-      );
-    } catch {}
-
-    if (audio) {
-      try {
-        audio.volume = value / 100;
-      } catch {}
-    }
-  };
-
-  /* =======================================================
      FORMAT TIME
   ======================================================= */
 
@@ -861,10 +860,14 @@ const Player = () => {
     const remaining =
       seconds % 60;
 
-    return `${String(minutes).padStart(
+    return `${String(
+      minutes
+    ).padStart(
       2,
       "0"
-    )}:${String(remaining).padStart(
+    )}:${String(
+      remaining
+    ).padStart(
       2,
       "0"
     )}`;
@@ -900,7 +903,8 @@ const Player = () => {
               name: currentSong.name,
               duration:
                 currentSong.duration,
-              image: currentSong.image,
+              image:
+                currentSong.image,
               artists:
                 currentSong.artists,
               audio:
@@ -998,6 +1002,7 @@ const Player = () => {
       alert(
         "Download URL is not available."
       );
+
       return;
     }
 
@@ -1030,7 +1035,9 @@ const Player = () => {
       link.download = filename;
 
       document.body.appendChild(link);
+
       link.click();
+
       link.remove();
 
       setTimeout(() => {
@@ -1040,7 +1047,7 @@ const Player = () => {
       }, 1000);
     } catch (error) {
       console.warn(
-        "Direct download fallback:",
+        "Direct download failed:",
         error
       );
 
@@ -1053,7 +1060,9 @@ const Player = () => {
       link.rel = "noopener";
 
       document.body.appendChild(link);
+
       link.click();
+
       link.remove();
     }
   };
@@ -1074,10 +1083,10 @@ const Player = () => {
   const hasSyncedLyrics =
     Boolean(
       lyrics?.synced &&
-      Array.isArray(
-        lyrics?.lines
-      ) &&
-      lyrics.lines.length
+        Array.isArray(
+          lyrics?.lines
+        ) &&
+        lyrics.lines.length
     );
 
   /* =======================================================
@@ -1088,7 +1097,7 @@ const Player = () => {
     <div className="fixed bottom-14 lg:bottom-0 left-0 z-50 w-full">
 
       {/* ===================================================
-          PLAYER BACKGROUND
+          PLAYER
       =================================================== */}
 
       <div
@@ -1097,21 +1106,24 @@ const Player = () => {
           w-full
           overflow-hidden
           rounded-t-2xl
-          shadow-2xl
           border-t
           border-white/10
           bg-black
-          ${isMaximized
-            ? "min-h-[90vh] max-h-[90vh]"
-            : "Player"}
+          shadow-2xl
+          ${
+            isMaximized
+              ? "min-h-[90vh] max-h-[90vh]"
+              : ""
+          }
         `}
       >
 
         {/* =================================================
-            BLURRED ALBUM BACKGROUND
+            ALBUM COVER BACKGROUND
         ================================================= */}
 
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
+
           <img
             src={artwork}
             alt=""
@@ -1121,22 +1133,44 @@ const Player = () => {
               h-full
               w-full
               object-cover
-              scale-110
+              scale-125
               blur-3xl
-              opacity-30
+              opacity-40
             "
             onError={(event) => {
+              if (
+                event.currentTarget.src.includes(
+                  "Unknown.png"
+                )
+              ) {
+                return;
+              }
+
               event.currentTarget.src =
                 "/Unknown.png";
             }}
           />
 
+          {/* DARK OVERLAY */}
+
           <div className="
             absolute
             inset-0
-            bg-black/75
+            bg-black/70
             backdrop-blur-xl
           " />
+
+          {/* EXTRA GRADIENT */}
+
+          <div className="
+            absolute
+            inset-0
+            bg-gradient-to-b
+            from-black/20
+            via-black/50
+            to-black/95
+          " />
+
         </div>
 
         {/* =================================================
@@ -1147,9 +1181,11 @@ const Player = () => {
           className={`
             relative
             z-10
-            ${isMaximized
-              ? "h-[90vh] overflow-hidden p-4"
-              : "p-3 lg:px-6"}
+            ${
+              isMaximized
+                ? "h-[90vh] overflow-hidden p-4"
+                : "p-3 lg:px-6"
+            }
           `}
         >
 
@@ -1158,11 +1194,12 @@ const Player = () => {
           ================================================= */}
 
           {!isMaximized ? (
+
             <div className="
               flex
+              w-full
               items-center
               gap-3
-              w-full
             ">
 
               {/* COVER */}
@@ -1176,7 +1213,9 @@ const Player = () => {
                   shrink-0
                   rounded-lg
                   object-cover
-                  shadow-lg
+                  shadow-xl
+                  ring-1
+                  ring-white/10
                 "
                 onError={(event) => {
                   event.currentTarget.src =
@@ -1228,10 +1267,7 @@ const Player = () => {
                     step="0.1"
                     value={progress}
                     onChange={seek}
-                    className="
-                      range
-                      w-full
-                    "
+                    className="range w-full"
                   />
 
                   <span className="text-[10px]">
@@ -1241,6 +1277,7 @@ const Player = () => {
                   </span>
 
                 </div>
+
               </div>
 
               {/* PREVIOUS */}
@@ -1251,7 +1288,11 @@ const Player = () => {
                   prevSong?.()
                 }
                 title="Previous"
-                className="shrink-0"
+                className="
+                  hidden
+                  shrink-0
+                  sm:block
+                "
               >
                 <IoMdSkipBackward className="text-2xl" />
               </button>
@@ -1286,7 +1327,11 @@ const Player = () => {
                   nextSong?.()
                 }
                 title="Next"
-                className="shrink-0"
+                className="
+                  hidden
+                  shrink-0
+                  sm:block
+                "
               >
                 <IoMdSkipForward className="text-2xl" />
               </button>
@@ -1297,7 +1342,11 @@ const Player = () => {
                 type="button"
                 onClick={toggleLike}
                 title="Like"
-                className="hidden sm:block"
+                className="
+                  hidden
+                  shrink-0
+                  sm:block
+                "
               >
                 {isLiked ? (
                   <FaHeart className="text-xl text-red-500" />
@@ -1384,7 +1433,7 @@ const Player = () => {
               </div>
 
               {/* =================================================
-                  COVER / LYRICS SWITCH
+                  COVER / LYRICS
               ================================================= */}
 
               <div className="
@@ -1394,8 +1443,9 @@ const Player = () => {
                 rounded-full
                 border
                 border-white/10
-                bg-white/5
+                bg-black/30
                 p-1
+                backdrop-blur-md
               ">
 
                 <button
@@ -1408,10 +1458,10 @@ const Player = () => {
                     px-5
                     py-2
                     text-sm
-                    transition
+                    transition-all
                     ${
                       !showLyrics
-                        ? "bg-white text-black"
+                        ? "bg-white text-black shadow-lg"
                         : "text-white/60 hover:text-white"
                     }
                   `}
@@ -1429,10 +1479,10 @@ const Player = () => {
                     px-5
                     py-2
                     text-sm
-                    transition
+                    transition-all
                     ${
                       showLyrics
-                        ? "bg-white text-black"
+                        ? "bg-white text-black shadow-lg"
                         : "text-white/60 hover:text-white"
                     }
                   `}
@@ -1452,10 +1502,10 @@ const Player = () => {
                   flex
                   min-h-0
                   flex-1
+                  w-full
                   flex-col
                   items-center
                   justify-center
-                  w-full
                 ">
 
                   <img
@@ -1463,11 +1513,11 @@ const Player = () => {
                     alt={songName}
                     className="
                       mt-4
-                      h-64
-                      w-64
+                      h-56
+                      w-56
                       rounded-2xl
                       object-cover
-                      shadow-2xl
+                      shadow-[0_25px_80px_rgba(0,0,0,0.6)]
                       ring-1
                       ring-white/10
                       sm:h-72
@@ -1485,8 +1535,6 @@ const Player = () => {
 
                 /* =================================================
                    LYRICS VIEW
-                   
-                   THIS CONTAINER IS THE ONLY SCROLL AREA
                 ================================================= */
 
                 <div
@@ -1509,8 +1557,18 @@ const Player = () => {
                   "
                   style={{
                     scrollbarWidth: "thin",
+
+                    /*
+                      Prevent scroll chaining
+                      to the page.
+                    */
                     overscrollBehavior:
                       "contain",
+
+                    /*
+                      Only this container
+                      gets smooth scrolling.
+                    */
                     scrollBehavior:
                       "smooth",
                   }}
@@ -1522,8 +1580,9 @@ const Player = () => {
                       flex
                       min-h-full
                       flex-col
-                      justify-start
                       gap-2
+                      pb-[30vh]
+                      pt-[20vh]
                     ">
 
                       {lyrics.lines.map(
@@ -1553,6 +1612,7 @@ const Player = () => {
                                 transition-all
                                 duration-500
                                 ease-out
+
                                 ${
                                   isActive
                                     ? `
@@ -1591,6 +1651,7 @@ const Player = () => {
                       justify-center
                       px-4
                     ">
+
                       <p className="
                         whitespace-pre-line
                         text-center
@@ -1602,6 +1663,7 @@ const Player = () => {
                           lyrics.plain
                         )}
                       </p>
+
                     </div>
 
                   ) : (
@@ -1612,12 +1674,14 @@ const Player = () => {
                       items-center
                       justify-center
                     ">
+
                       <p className="
                         text-center
                         text-white/50
                       ">
                         No lyrics available.
                       </p>
+
                     </div>
 
                   )}
@@ -1626,11 +1690,13 @@ const Player = () => {
               )}
 
               {/* =================================================
-                  SONG INFORMATION
+                  SONG INFO
               ================================================= */}
 
               <h2 className="
                 mt-4
+                max-w-full
+                truncate
                 text-center
                 text-xl
                 font-bold
@@ -1639,6 +1705,8 @@ const Player = () => {
               </h2>
 
               <p className="
+                max-w-full
+                truncate
                 text-center
                 text-sm
                 text-white/60
@@ -1658,7 +1726,10 @@ const Player = () => {
                 gap-2
               ">
 
-                <span className="text-xs text-white/60">
+                <span className="
+                  text-xs
+                  text-white/60
+                ">
                   {formatTime(
                     currentTime
                   )}
@@ -1678,7 +1749,10 @@ const Player = () => {
                   "
                 />
 
-                <span className="text-xs text-white/60">
+                <span className="
+                  text-xs
+                  text-white/60
+                ">
                   {formatTime(
                     duration
                   )}
@@ -1743,6 +1817,7 @@ const Player = () => {
                     shadow-xl
                     transition
                     hover:scale-105
+                    active:scale-95
                   "
                   title={
                     isPlaying
@@ -1753,7 +1828,7 @@ const Player = () => {
                   {isPlaying ? (
                     <FaPause className="text-2xl" />
                   ) : (
-                    <FaPlay className="text-2xl ml-0.5" />
+                    <FaPlay className="ml-0.5 text-2xl" />
                   )}
                 </button>
 
@@ -1797,55 +1872,29 @@ const Player = () => {
               </div>
 
               {/* =================================================
-                  VOLUME
+                  LIKE + DOWNLOAD
               ================================================= */}
 
               <div className="
                 mt-4
                 flex
-                w-full
-                max-w-sm
                 items-center
-                gap-2
-              ">
-
-                <PiSpeakerLowFill />
-
-                <input
-                  aria-label="Volume"
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={volume}
-                  onChange={changeVolume}
-                  className="
-                    range
-                    flex-1
-                  "
-                />
-
-              </div>
-
-              {/* =================================================
-                  LIKE + DOWNLOAD
-              ================================================= */}
-
-              <div className="
-                mt-3
-                flex
-                gap-5
+                gap-6
               ">
 
                 <button
                   type="button"
                   onClick={toggleLike}
                   title="Like"
-                  className="transition hover:scale-110"
+                  className="
+                    transition
+                    hover:scale-110
+                  "
                 >
                   {isLiked ? (
-                    <FaHeart className="text-red-500" />
+                    <FaHeart className="text-xl text-red-500" />
                   ) : (
-                    <FaRegHeart />
+                    <FaRegHeart className="text-xl" />
                   )}
                 </button>
 
@@ -1853,7 +1902,10 @@ const Player = () => {
                   type="button"
                   onClick={handleDownload}
                   title="Download"
-                  className="transition hover:scale-110"
+                  className="
+                    transition
+                    hover:scale-110
+                  "
                 >
                   <MdDownload className="text-2xl" />
                 </button>
@@ -1914,7 +1966,9 @@ const Player = () => {
                       }}
                     />
 
-                    <span>
+                    <span className="
+                      truncate
+                    ">
                       {safeDecode(
                         detail.album.name
                       )}
@@ -1943,7 +1997,9 @@ const Player = () => {
                     justify-between
                   ">
 
-                    <h3 className="font-semibold">
+                    <h3 className="
+                      font-semibold
+                    ">
                       You Might Like
                     </h3>
 
@@ -1999,7 +2055,10 @@ const Player = () => {
                   >
 
                     {suggestionList.map(
-                      (item, index) => (
+                      (
+                        item,
+                        index
+                      ) => (
                         <SongGrid
                           key={
                             item?.id ||
