@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+
 import {
   fetchplaylistsByID,
   searchAlbumByQuery,
@@ -28,6 +29,9 @@ const MainSection = () => {
   const [artists, setArtists] = useState([]);
   const [playlists, setPlaylists] = useState([]);
 
+  const [recentlyPlayedSongs, setRecentlyPlayedSongs] =
+    useState([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -40,33 +44,63 @@ const MainSection = () => {
   const trendingScrollRef = useRef(null);
 
   // =========================================================
-  // GET RECENTLY PLAYED SONGS
+  // READ RECENTLY PLAYED
   // =========================================================
 
-  const recentlyPlayedSongs = useMemo(() => {
+  const loadRecentlyPlayed = () => {
     try {
-      const storedSongs = localStorage.getItem("playedSongs");
+      const storedSongs =
+        localStorage.getItem("playedSongs");
 
       if (!storedSongs) {
-        return [];
+        setRecentlyPlayedSongs([]);
+        return;
       }
 
       const parsedSongs = JSON.parse(storedSongs);
 
       if (!Array.isArray(parsedSongs)) {
-        return [];
+        setRecentlyPlayedSongs([]);
+        return;
       }
 
-      return parsedSongs;
+      setRecentlyPlayedSongs(parsedSongs);
     } catch (err) {
-      console.error("Unable to read recently played songs:", err);
-      return [];
+      console.error(
+        "Unable to read recently played songs:",
+        err
+      );
+
+      setRecentlyPlayedSongs([]);
     }
+  };
+
+  // =========================================================
+  // INITIAL RECENTLY PLAYED LOAD
+  // =========================================================
+
+  useEffect(() => {
+    loadRecentlyPlayed();
+
+    const handleStorage = () => {
+      loadRecentlyPlayed();
+    };
+
+    window.addEventListener(
+      "storage",
+      handleStorage
+    );
+
+    return () => {
+      window.removeEventListener(
+        "storage",
+        handleStorage
+      );
+    };
   }, []);
 
   // =========================================================
-  // COMBINE ALL SONGS
-  // REMOVE DUPLICATES
+  // COMBINE SONGS
   // =========================================================
 
   const songList = useMemo(() => {
@@ -84,20 +118,31 @@ const MainSection = () => {
         continue;
       }
 
-      // If song has no ID, don't try to deduplicate it
-      if (song.id === undefined || song.id === null) {
+      const id =
+        song.id ??
+        song.songId ??
+        song.trackId;
+
+      // Songs without an ID are still allowed
+      if (id === undefined || id === null) {
         uniqueSongs.push(song);
         continue;
       }
 
-      if (!songIds.has(song.id)) {
-        songIds.add(song.id);
+      const stringId = String(id);
+
+      if (!songIds.has(stringId)) {
+        songIds.add(stringId);
         uniqueSongs.push(song);
       }
     }
 
     return uniqueSongs;
-  }, [recentlyPlayedSongs, trending, latestSongs]);
+  }, [
+    recentlyPlayedSongs,
+    trending,
+    latestSongs,
+  ]);
 
   // =========================================================
   // SCROLL LEFT
@@ -109,7 +154,7 @@ const MainSection = () => {
     }
 
     ref.current.scrollBy({
-      left: -1000,
+      left: -800,
       behavior: "smooth",
     });
   };
@@ -124,7 +169,7 @@ const MainSection = () => {
     }
 
     ref.current.scrollBy({
-      left: 1000,
+      left: 800,
       behavior: "smooth",
     });
   };
@@ -134,17 +179,17 @@ const MainSection = () => {
   // =========================================================
 
   const getGreeting = () => {
-    const hours = new Date().getHours();
+    const hour = new Date().getHours();
 
-    if (hours < 12) {
+    if (hour < 12) {
       return "Good Morning";
     }
 
-    if (hours < 18) {
+    if (hour < 18) {
       return "Good Afternoon";
     }
 
-    if (hours < 21) {
+    if (hour < 21) {
       return "Good Evening";
     }
 
@@ -163,10 +208,6 @@ const MainSection = () => {
         setLoading(true);
         setError("");
 
-        // -----------------------------------------------------
-        // Run API requests together
-        // -----------------------------------------------------
-
         const [
           trendingResponse,
           latestResponse,
@@ -175,17 +216,21 @@ const MainSection = () => {
         ] = await Promise.all([
           fetchplaylistsByID(10763385),
           fetchplaylistsByID(80802063),
-          searchAlbumByQuery("Tamil, Malayalam"),
-          searchPlayListByQuery("Tamil, Malayalam"),
+          searchAlbumByQuery(
+            "Tamil, Malayalam"
+          ),
+          searchPlayListByQuery(
+            "Tamil, Malayalam"
+          ),
         ]);
 
         if (!mounted) {
           return;
         }
 
-        // -----------------------------------------------------
+        // =====================================================
         // TRENDING
-        // -----------------------------------------------------
+        // =====================================================
 
         const trendingSongs =
           trendingResponse?.data?.songs;
@@ -196,9 +241,9 @@ const MainSection = () => {
             : []
         );
 
-        // -----------------------------------------------------
+        // =====================================================
         // LATEST SONGS
-        // -----------------------------------------------------
+        // =====================================================
 
         const newSongs =
           latestResponse?.data?.songs;
@@ -209,9 +254,9 @@ const MainSection = () => {
             : []
         );
 
-        // -----------------------------------------------------
+        // =====================================================
         // ALBUMS
-        // -----------------------------------------------------
+        // =====================================================
 
         const albumResults =
           albumResponse?.data?.results;
@@ -222,9 +267,9 @@ const MainSection = () => {
             : []
         );
 
-        // -----------------------------------------------------
+        // =====================================================
         // PLAYLISTS
-        // -----------------------------------------------------
+        // =====================================================
 
         const playlistResults =
           playlistResponse?.data?.results;
@@ -235,24 +280,35 @@ const MainSection = () => {
             : []
         );
 
-        // -----------------------------------------------------
+        // =====================================================
         // ARTISTS
-        // -----------------------------------------------------
+        // =====================================================
 
-        if (Array.isArray(artistData?.results)) {
-          setArtists(artistData.results);
-        } else if (Array.isArray(artistData)) {
+        if (
+          Array.isArray(
+            artistData?.results
+          )
+        ) {
+          setArtists(
+            artistData.results
+          );
+        } else if (
+          Array.isArray(artistData)
+        ) {
           setArtists(artistData);
         } else {
           setArtists([]);
         }
       } catch (err) {
-        console.error("MainSection Error:", err);
+        console.error(
+          "MainSection Error:",
+          err
+        );
 
         if (mounted) {
           setError(
             err?.message ||
-              "Unable to load music data."
+              "Unable to load music data. Please try again."
           );
         }
       } finally {
@@ -294,18 +350,20 @@ const MainSection = () => {
   if (error) {
     return (
       <div className="min-h-[60vh] w-full flex items-center justify-center px-5">
-        <div className="text-center">
+        <div className="text-center max-w-md">
           <h2 className="text-xl font-semibold text-red-500">
             Something went wrong
           </h2>
 
-          <p className="mt-2 text-sm opacity-70">
+          <p className="mt-2 text-sm opacity-70 break-words">
             {error}
           </p>
 
           <button
             type="button"
-            onClick={() => window.location.reload()}
+            onClick={() =>
+              window.location.reload()
+            }
             className="
               mt-5
               px-5
@@ -385,13 +443,13 @@ const MainSection = () => {
           </h2>
 
           <div className="flex justify-center items-center gap-3 w-full">
-            {/* LEFT ARROW */}
-
             <button
               type="button"
               aria-label="Scroll recently played left"
               onClick={() =>
-                scrollLeft(recentlyPlayedScrollRef)
+                scrollLeft(
+                  recentlyPlayedScrollRef
+                )
               }
               className="
                 text-3xl
@@ -409,8 +467,6 @@ const MainSection = () => {
             >
               <MdOutlineKeyboardArrowLeft />
             </button>
-
-            {/* SONG LIST */}
 
             <div
               ref={recentlyPlayedScrollRef}
@@ -433,7 +489,11 @@ const MainSection = () => {
               {recentlyPlayedSongs.map(
                 (song, index) => (
                   <SongGrid
-                    key={song?.id || index}
+                    key={
+                      song?.id ??
+                      song?.songId ??
+                      index
+                    }
                     {...song}
                     song={songList}
                   />
@@ -441,13 +501,13 @@ const MainSection = () => {
               )}
             </div>
 
-            {/* RIGHT ARROW */}
-
             <button
               type="button"
               aria-label="Scroll recently played right"
               onClick={() =>
-                scrollRight(recentlyPlayedScrollRef)
+                scrollRight(
+                  recentlyPlayedScrollRef
+                )
               }
               className="
                 text-3xl
@@ -489,13 +549,13 @@ const MainSection = () => {
         </h2>
 
         <div className="flex justify-center items-center gap-3 w-full">
-          {/* LEFT ARROW */}
-
           <button
             type="button"
             aria-label="Scroll new songs left"
             onClick={() =>
-              scrollLeft(latestSongsScrollRef)
+              scrollLeft(
+                latestSongsScrollRef
+              )
             }
             className="
               text-3xl
@@ -513,8 +573,6 @@ const MainSection = () => {
           >
             <MdOutlineKeyboardArrowLeft />
           </button>
-
-          {/* SONG LIST */}
 
           <div
             ref={latestSongsScrollRef}
@@ -538,7 +596,11 @@ const MainSection = () => {
             {latestSongs.map(
               (song, index) => (
                 <SongGrid
-                  key={song?.id || index}
+                  key={
+                    song?.id ??
+                    song?.songId ??
+                    index
+                  }
                   {...song}
                   song={songList}
                 />
@@ -546,13 +608,13 @@ const MainSection = () => {
             )}
           </div>
 
-          {/* RIGHT ARROW */}
-
           <button
             type="button"
             aria-label="Scroll new songs right"
             onClick={() =>
-              scrollRight(latestSongsScrollRef)
+              scrollRight(
+                latestSongsScrollRef
+              )
             }
             className="
               text-3xl
@@ -596,13 +658,13 @@ const MainSection = () => {
         </h2>
 
         <div className="flex justify-center items-center gap-3 w-full">
-          {/* LEFT ARROW */}
-
           <button
             type="button"
             aria-label="Scroll trending songs left"
             onClick={() =>
-              scrollLeft(trendingScrollRef)
+              scrollLeft(
+                trendingScrollRef
+              )
             }
             className="
               text-3xl
@@ -620,8 +682,6 @@ const MainSection = () => {
           >
             <MdOutlineKeyboardArrowLeft />
           </button>
-
-          {/* SONG LIST */}
 
           <div
             ref={trendingScrollRef}
@@ -645,7 +705,11 @@ const MainSection = () => {
             {trending.map(
               (song, index) => (
                 <SongGrid
-                  key={song?.id || index}
+                  key={
+                    song?.id ??
+                    song?.songId ??
+                    index
+                  }
                   {...song}
                   song={songList}
                 />
@@ -653,13 +717,13 @@ const MainSection = () => {
             )}
           </div>
 
-          {/* RIGHT ARROW */}
-
           <button
             type="button"
             aria-label="Scroll trending songs right"
             onClick={() =>
-              scrollRight(trendingScrollRef)
+              scrollRight(
+                trendingScrollRef
+              )
             }
             className="
               text-3xl
@@ -765,7 +829,9 @@ const MainSection = () => {
         </h2>
 
         {playlists.length > 0 ? (
-          <PlaylistSlider playlists={playlists} />
+          <PlaylistSlider
+            playlists={playlists}
+          />
         ) : (
           <p className="px-5 opacity-60">
             No playlists available.
