@@ -4,10 +4,24 @@ import {
   IoMdSkipForward,
 } from "react-icons/io";
 import { IoShareSocial } from "react-icons/io5";
-import { PiShuffleBold, PiSpeakerLowFill } from "react-icons/pi";
-import { LuRepeat, LuRepeat1 } from "react-icons/lu";
-import { FaPlay, FaPause, FaHeart, FaRegHeart } from "react-icons/fa";
-import { MdDownload, MdKeyboardArrowDown } from "react-icons/md";
+import {
+  PiShuffleBold,
+  PiSpeakerLowFill,
+} from "react-icons/pi";
+import {
+  LuRepeat,
+  LuRepeat1,
+} from "react-icons/lu";
+import {
+  FaPlay,
+  FaPause,
+  FaHeart,
+  FaRegHeart,
+} from "react-icons/fa";
+import {
+  MdDownload,
+  MdKeyboardArrowDown,
+} from "react-icons/md";
 import { CiMaximize1 } from "react-icons/ci";
 import { Link } from "react-router-dom";
 import he from "he";
@@ -15,30 +29,85 @@ import he from "he";
 import MusicContext from "../context/MusicContext";
 import ArtistItems from "./Items/ArtistItems";
 import SongGrid from "./SongGrid";
-import { getSongById, getSuggestionSong } from "../../fetch";
+import {
+  getSongById,
+  getSuggestionSong,
+} from "../../fetch";
+
+/* =========================================================
+   HELPERS
+========================================================= */
 
 const safeDecode = (value) => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
   try {
-    return he.decode(String(value || ""));
+    return he.decode(String(value));
   } catch {
-    return String(value || "");
+    return String(value);
   }
 };
 
 const getImage = (song, coverImage) => {
+  // Context cover image
+  if (
+    typeof coverImage === "string" &&
+    coverImage.trim()
+  ) {
+    return coverImage;
+  }
+
+  // Direct string image
+  if (
+    typeof song?.image === "string" &&
+    song.image.trim()
+  ) {
+    return song.image;
+  }
+
+  // Array image format
+  if (Array.isArray(song?.image)) {
+    return (
+      song.image?.[2]?.url ||
+      song.image?.[2]?.link ||
+      song.image?.[1]?.url ||
+      song.image?.[1]?.link ||
+      song.image?.[0]?.url ||
+      song.image?.[0]?.link ||
+      "/Unknown.png"
+    );
+  }
+
+  // Object image format
   return (
-    coverImage ||
-    song?.image ||
+    song?.image?.url ||
+    song?.image?.link ||
     song?.image?.[2]?.url ||
+    song?.image?.[1]?.url ||
     song?.image?.[0]?.url ||
     "/Unknown.png"
   );
 };
 
+const getSongId = (song) => {
+  return (
+    song?.id ||
+    song?.songId ||
+    song?.song_id ||
+    song?.perma_url ||
+    null
+  );
+};
+
+/* =========================================================
+   PLAYER COMPONENT
+========================================================= */
+
 const Player = () => {
   const {
     currentSong,
-    playMusic,
     isPlaying,
     setIsPlaying,
     shuffle,
@@ -50,223 +119,432 @@ const Player = () => {
     downloadSong,
     lyrics,
     coverImage,
-  } = useContext(MusicContext) || {};
+  } = useContext(MusicContext);
 
-  const [volume, setVolume] = useState(() => {
-    try {
-      const value = Number(localStorage.getItem("volume"));
-      return Number.isFinite(value)
-        ? Math.min(100, Math.max(0, value))
-        : 100;
-    } catch {
-      return 100;
-    }
-  });
+  /* =======================================================
+     STATE
+  ======================================================= */
 
+  const [volume, setVolume] = useState(1);
   const [isMaximized, setIsMaximized] = useState(false);
   const [showLyrics, setShowLyrics] = useState(false);
+
   const [currentTime, setCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
+
   const [detail, setDetail] = useState(null);
   const [suggestions, setSuggestions] = useState([]);
+
   const [likedSongs, setLikedSongs] = useState(() => {
     try {
-      const data = JSON.parse(
-        localStorage.getItem("likedSongs") || "[]"
-      );
-      return Array.isArray(data) ? data : [];
+      const saved = localStorage.getItem("musicmax-liked");
+
+      return saved
+        ? JSON.parse(saved)
+        : [];
     } catch {
       return [];
     }
   });
 
+  /* =======================================================
+     REFS
+  ======================================================= */
+
   const scrollRef = useRef(null);
 
-  const audio = currentSong?.audio;
+  // IMPORTANT:
+  // This ref belongs ONLY to the lyrics scroll container.
+  const lyricContainerRef = useRef(null);
 
-  const duration =
-    Number(currentSong?.duration) > 0
-      ? Number(currentSong.duration)
-      : audioDuration;
+  /* =======================================================
+     SONG DATA
+  ======================================================= */
 
-  const progress =
-    duration > 0
-      ? Math.min(
-          100,
-          Math.max(0, (currentTime / duration) * 100)
-        )
-      : 0;
+  const audio = currentSong?.audio || null;
 
-  const songName = useMemo(
-    () => safeDecode(currentSong?.name || "Unknown Song"),
-    [currentSong?.name]
+  const songId = getSongId(currentSong);
+
+  const songName = safeDecode(
+    currentSong?.name ||
+      currentSong?.title ||
+      "Unknown Song"
   );
 
-  const artistNames = useMemo(() => {
-    const primary = currentSong?.artists?.primary;
+  const artistNames = safeDecode(
+    currentSong?.primaryArtists ||
+      currentSong?.artists?.primary
+        ?.map((artist) => artist?.name)
+        ?.join(", ") ||
+      currentSong?.artist ||
+      "Unknown Artist"
+  );
 
-    if (Array.isArray(primary) && primary.length) {
-      return primary
-        .map((artist) =>
-          safeDecode(artist?.name || "Unknown Artist")
-        )
-        .join(", ");
+  const artwork = getImage(
+    currentSong,
+    coverImage
+  );
+
+  const isLiked = useMemo(() => {
+    if (!songId) return false;
+
+    return likedSongs.some(
+      (song) => song?.id === songId
+    );
+  }, [likedSongs, songId]);
+
+  /* =======================================================
+     AUDIO DURATION
+  ======================================================= */
+
+  const progress = useMemo(() => {
+    if (
+      !audioDuration ||
+      !Number.isFinite(audioDuration)
+    ) {
+      return 0;
     }
 
-    return safeDecode(
-      currentSong?.artists?.name ||
-        currentSong?.artist ||
-        "Unknown Artist"
+    return Math.min(
+      100,
+      Math.max(
+        0,
+        (currentTime / audioDuration) * 100
+      )
     );
-  }, [currentSong?.artists, currentSong?.artist]);
+  }, [currentTime, audioDuration]);
 
-  const artwork = getImage(currentSong, coverImage);
+  /* =======================================================
+     ACTIVE LYRIC
+  ======================================================= */
 
-  const isLiked = likedSongs.some(
-    (item) =>
-      String(item?.id) === String(currentSong?.id)
-  );
+  const activeLyricIndex = useMemo(() => {
+    if (
+      !lyrics?.synced ||
+      !Array.isArray(lyrics?.lines) ||
+      lyrics.lines.length === 0
+    ) {
+      return -1;
+    }
 
-  /* --------------------------------
-     Reset lyrics when song changes
-  -------------------------------- */
+    let active = -1;
+
+    lyrics.lines.forEach((line, index) => {
+      const rawTime = Number(line?.time);
+
+      if (!Number.isFinite(rawTime)) {
+        return;
+      }
+
+      /*
+        Some APIs can return milliseconds instead of seconds.
+        If the value is unusually large, convert it.
+      */
+      const lineTime =
+        rawTime > 10000
+          ? rawTime / 1000
+          : rawTime;
+
+      if (lineTime <= currentTime) {
+        active = index;
+      }
+    });
+
+    return active;
+  }, [lyrics, currentTime]);
+
+  /* =======================================================
+     RESET WHEN SONG CHANGES
+  ======================================================= */
+
   useEffect(() => {
-    setShowLyrics(false);
     setCurrentTime(0);
-  }, [currentSong?.id]);
+    setAudioDuration(0);
+    setShowLyrics(false);
+  }, [songId]);
 
-  /* --------------------------------
-     Audio events
-  -------------------------------- */
+  /* =======================================================
+     AUDIO EVENT LISTENERS
+  ======================================================= */
+
   useEffect(() => {
     if (!audio) {
-      setCurrentTime(0);
-      setAudioDuration(0);
-      return undefined;
+      return;
     }
 
-    const updateTime = () => {
-      setCurrentTime(
-        Number.isFinite(audio.currentTime)
-          ? audio.currentTime
-          : 0
-      );
+    const handleTimeUpdate = () => {
+      const time = Number(audio.currentTime);
+
+      if (Number.isFinite(time)) {
+        setCurrentTime(time);
+      }
+    };
+
+    const handleLoadedMetadata = () => {
+      const duration = Number(audio.duration);
 
       if (
-        Number.isFinite(audio.duration) &&
-        audio.duration > 0
+        Number.isFinite(duration) &&
+        duration > 0
       ) {
-        setAudioDuration(audio.duration);
+        setAudioDuration(duration);
       }
     };
 
-    const loadedMetadata = () => {
+    const handleDurationChange = () => {
+      const duration = Number(audio.duration);
+
       if (
-        Number.isFinite(audio.duration) &&
-        audio.duration > 0
+        Number.isFinite(duration) &&
+        duration > 0
       ) {
-        setAudioDuration(audio.duration);
-      }
-
-      updateTime();
-    };
-
-    const ended = () => {
-      if (repeatMode !== "one") {
-        nextSong?.();
+        setAudioDuration(duration);
       }
     };
 
-    audio.addEventListener("timeupdate", updateTime);
+    const handleEnded = () => {
+      if (repeatMode === "one") {
+        try {
+          audio.currentTime = 0;
+          audio.play();
+        } catch {
+          // Ignore browser autoplay errors
+        }
+
+        return;
+      }
+
+      nextSong?.();
+    };
+
+    audio.addEventListener(
+      "timeupdate",
+      handleTimeUpdate
+    );
+
     audio.addEventListener(
       "loadedmetadata",
-      loadedMetadata
+      handleLoadedMetadata
     );
+
     audio.addEventListener(
       "durationchange",
-      loadedMetadata
+      handleDurationChange
     );
-    audio.addEventListener("ended", ended);
 
-    updateTime();
+    audio.addEventListener(
+      "ended",
+      handleEnded
+    );
+
+    // Get existing duration immediately
+    if (
+      Number.isFinite(audio.duration) &&
+      audio.duration > 0
+    ) {
+      setAudioDuration(audio.duration);
+    }
 
     return () => {
       audio.removeEventListener(
         "timeupdate",
-        updateTime
+        handleTimeUpdate
       );
+
       audio.removeEventListener(
         "loadedmetadata",
-        loadedMetadata
+        handleLoadedMetadata
       );
+
       audio.removeEventListener(
         "durationchange",
-        loadedMetadata
+        handleDurationChange
       );
-      audio.removeEventListener("ended", ended);
+
+      audio.removeEventListener(
+        "ended",
+        handleEnded
+      );
     };
   }, [audio, nextSong, repeatMode]);
 
-  /* --------------------------------
-     Volume + repeat
-  -------------------------------- */
-  useEffect(() => {
-    if (!audio) return;
+  /* =======================================================
+     AUDIO VOLUME
+  ======================================================= */
 
-    audio.volume = volume / 100;
-    audio.loop = repeatMode === "one";
-  }, [audio, volume, repeatMode]);
-
-  /* --------------------------------
-     Fetch song details
-  -------------------------------- */
   useEffect(() => {
-    if (!currentSong?.id) {
-      setDetail(null);
-      setSuggestions([]);
-      return undefined;
+    if (!audio) {
+      return;
     }
 
+    try {
+      audio.volume = Math.min(
+        1,
+        Math.max(0, volume)
+      );
+    } catch {
+      // Ignore
+    }
+  }, [audio, volume]);
+
+  /* =======================================================
+     AUTO SCROLL ACTIVE LYRIC
+     
+     IMPORTANT:
+     This scrolls ONLY the lyrics container.
+  ======================================================= */
+
+  useEffect(() => {
+    if (
+      !showLyrics ||
+      activeLyricIndex < 0 ||
+      !lyricContainerRef.current
+    ) {
+      return;
+    }
+
+    const container =
+      lyricContainerRef.current;
+
+    const frame = requestAnimationFrame(() => {
+      const activeEl =
+        container.children[
+          activeLyricIndex
+        ];
+
+      if (!activeEl) {
+        return;
+      }
+
+      const top =
+        activeEl.offsetTop -
+        container.clientHeight / 2 +
+        activeEl.clientHeight / 2;
+
+      container.scrollTo({
+        top: Math.max(0, top),
+        behavior: "smooth",
+      });
+    });
+
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [
+    activeLyricIndex,
+    showLyrics,
+  ]);
+
+  /* =======================================================
+     FETCH SONG DETAILS / SUGGESTIONS
+  ======================================================= */
+
+  useEffect(() => {
     let cancelled = false;
 
-    Promise.allSettled([
-      getSongById(currentSong.id),
-      getSuggestionSong(currentSong.id),
-    ]).then(([detailResult, suggestionResult]) => {
-      if (cancelled) return;
-
-      if (detailResult.status === "fulfilled") {
-        setDetail(
-          detailResult.value?.data?.[0] || null
-        );
-      } else {
+    const loadSongData = async () => {
+      if (!songId) {
         setDetail(null);
-      }
-
-      if (suggestionResult.status === "fulfilled") {
-        const data = suggestionResult.value?.data;
-
-        setSuggestions(
-          Array.isArray(data) ? data : []
-        );
-      } else {
         setSuggestions([]);
+        return;
       }
-    });
+
+      try {
+        const results =
+          await Promise.allSettled([
+            getSongById(songId),
+            getSuggestionSong(songId),
+          ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        const detailResult = results[0];
+
+        const suggestionResult = results[1];
+
+        if (
+          detailResult?.status === "fulfilled"
+        ) {
+          const data =
+            detailResult.value;
+
+          setDetail(
+            data?.data ||
+              data?.result ||
+              data ||
+              null
+          );
+        } else {
+          setDetail(null);
+        }
+
+        if (
+          suggestionResult?.status ===
+          "fulfilled"
+        ) {
+          const data =
+            suggestionResult.value;
+
+          const list =
+            data?.data?.songs ||
+            data?.data?.results ||
+            data?.songs ||
+            data?.results ||
+            [];
+
+          setSuggestions(
+            Array.isArray(list)
+              ? list
+              : []
+          );
+        } else {
+          setSuggestions([]);
+        }
+      } catch (error) {
+        console.error(
+          "Player data error:",
+          error
+        );
+
+        if (!cancelled) {
+          setDetail(null);
+          setSuggestions([]);
+        }
+      }
+    };
+
+    loadSongData();
 
     return () => {
       cancelled = true;
     };
-  }, [currentSong?.id]);
+  }, [songId]);
 
-  /* --------------------------------
-     Media Session
-  -------------------------------- */
+  /* =======================================================
+     SAVE LIKES
+  ======================================================= */
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "musicmax-liked",
+        JSON.stringify(likedSongs)
+      );
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, [likedSongs]);
+
+  /* =======================================================
+     MEDIA SESSION
+  ======================================================= */
+
   useEffect(() => {
     if (
-      !currentSong ||
-      !("mediaSession" in navigator) ||
-      typeof MediaMetadata === "undefined"
+      typeof navigator === "undefined" ||
+      !("mediaSession" in navigator)
     ) {
       return;
     }
@@ -276,670 +554,747 @@ const Player = () => {
         new MediaMetadata({
           title: songName,
           artist: artistNames,
-          album: safeDecode(
-            detail?.album?.name || "MusicMax"
-          ),
-          artwork: artwork
-            ? [
-                {
-                  src: artwork,
-                  sizes: "500x500",
-                  type: "image/jpeg",
-                },
-              ]
-            : [],
+          album:
+            detail?.album?.name ||
+            detail?.album ||
+            "MusicMax",
+          artwork: [
+            {
+              src: artwork,
+              sizes: "512x512",
+              type: "image/jpeg",
+            },
+          ],
         });
 
       navigator.mediaSession.setActionHandler(
         "play",
         () => {
-          audio
-            ?.play()
-            .then(() => setIsPlaying?.(true))
-            .catch(() => {});
+          try {
+            audio?.play();
+            setIsPlaying(true);
+          } catch {
+            // Ignore
+          }
         }
       );
 
       navigator.mediaSession.setActionHandler(
         "pause",
         () => {
-          audio?.pause();
-          setIsPlaying?.(false);
+          try {
+            audio?.pause();
+            setIsPlaying(false);
+          } catch {
+            // Ignore
+          }
         }
       );
 
       navigator.mediaSession.setActionHandler(
         "previoustrack",
-        () => prevSong?.()
+        () => {
+          prevSong?.();
+        }
       );
 
       navigator.mediaSession.setActionHandler(
         "nexttrack",
-        () => nextSong?.()
+        () => {
+          nextSong?.();
+        }
       );
-    } catch {}
+
+      navigator.mediaSession.setActionHandler(
+        "seekbackward",
+        () => {
+          if (!audio) return;
+
+          audio.currentTime = Math.max(
+            0,
+            audio.currentTime - 10
+          );
+        }
+      );
+
+      navigator.mediaSession.setActionHandler(
+        "seekforward",
+        () => {
+          if (!audio) return;
+
+          audio.currentTime = Math.min(
+            audio.duration || Infinity,
+            audio.currentTime + 10
+          );
+        }
+      );
+    } catch (error) {
+      console.warn(
+        "Media Session error:",
+        error
+      );
+    }
+
+    return () => {
+      try {
+        [
+          "play",
+          "pause",
+          "previoustrack",
+          "nexttrack",
+          "seekbackward",
+          "seekforward",
+        ].forEach((action) => {
+          try {
+            navigator.mediaSession.setActionHandler(
+              action,
+              null
+            );
+          } catch {
+            // Browser may not support all actions
+          }
+        });
+      } catch {
+        // Ignore
+      }
+    };
   }, [
-    currentSong,
-    songName,
+    audio,
+    artwork,
     artistNames,
     detail,
-    artwork,
-    audio,
-    setIsPlaying,
-    prevSong,
     nextSong,
+    prevSong,
+    setIsPlaying,
+    songName,
   ]);
 
-  /* --------------------------------
-     Play / Pause
-  -------------------------------- */
+  /* =======================================================
+     PLAY / PAUSE
+  ======================================================= */
+
   const playPause = async () => {
-    if (!audio) return;
+    if (!audio) {
+      return;
+    }
 
     try {
       if (audio.paused) {
         await audio.play();
-        setIsPlaying?.(true);
+        setIsPlaying(true);
       } else {
         audio.pause();
-        setIsPlaying?.(false);
+        setIsPlaying(false);
       }
     } catch (error) {
-      console.error("Play/pause error:", error);
-      setIsPlaying?.(false);
+      console.error(
+        "Playback error:",
+        error
+      );
     }
   };
 
-  /* --------------------------------
-     Seek
-  -------------------------------- */
-  const seek = (event) => {
-    if (!audio || duration <= 0) return;
+  /* =======================================================
+     SEEK
+  ======================================================= */
 
-    const value = Number(event.target.value);
-    const time = (value / 100) * duration;
+  const seek = (event) => {
+    if (!audio || !audioDuration) {
+      return;
+    }
+
+    const value =
+      Number(event.target.value);
+
+    if (!Number.isFinite(value)) {
+      return;
+    }
+
+    const newTime =
+      (value / 100) * audioDuration;
 
     try {
-      audio.currentTime = Math.max(
-        0,
-        Math.min(duration, time)
-      );
-    } catch {}
-
-    setCurrentTime(time);
+      audio.currentTime = newTime;
+      setCurrentTime(newTime);
+    } catch {
+      // Ignore
+    }
   };
 
-  /* --------------------------------
-     Volume
-  -------------------------------- */
+  /* =======================================================
+     VOLUME
+  ======================================================= */
+
   const changeVolume = (event) => {
-    const value = Math.min(
-      100,
-      Math.max(0, Number(event.target.value))
-    );
+    const value =
+      Number(event.target.value) / 100;
+
+    if (!Number.isFinite(value)) {
+      return;
+    }
 
     setVolume(value);
+  };
 
-    try {
-      localStorage.setItem(
-        "volume",
-        String(value)
-      );
-    } catch {}
+  /* =======================================================
+     FORMAT TIME
+  ======================================================= */
 
-    if (audio) {
-      audio.volume = value / 100;
+  const formatTime = (seconds) => {
+    const value = Number(seconds);
+
+    if (
+      !Number.isFinite(value) ||
+      value < 0
+    ) {
+      return "0:00";
     }
+
+    const mins = Math.floor(value / 60);
+
+    const secs = Math.floor(value % 60)
+      .toString()
+      .padStart(2, "0");
+
+    return `${mins}:${secs}`;
   };
 
-  /* --------------------------------
-     Format time
-  -------------------------------- */
-  const formatTime = (value) => {
-    const seconds = Math.max(
-      0,
-      Math.floor(Number(value) || 0)
-    );
+  /* =======================================================
+     LIKE
+  ======================================================= */
 
-    return `${String(
-      Math.floor(seconds / 60)
-    ).padStart(2, "0")}:${String(
-      seconds % 60
-    ).padStart(2, "0")}`;
-  };
-
-  /* --------------------------------
-     Like
-  -------------------------------- */
   const toggleLike = () => {
-    if (!currentSong?.id) return;
+    if (!songId) {
+      return;
+    }
 
-    setLikedSongs((old) => {
-      const exists = old.some(
-        (item) =>
-          String(item?.id) ===
-          String(currentSong.id)
+    setLikedSongs((previous) => {
+      const exists = previous.some(
+        (song) => song?.id === songId
       );
 
-      const next = exists
-        ? old.filter(
-            (item) =>
-              String(item?.id) !==
-              String(currentSong.id)
-          )
-        : [
-            ...old,
-            {
-              id: currentSong.id,
-              name: currentSong.name,
-              duration: currentSong.duration,
-              image: artwork,
-              artists: currentSong.artists,
-              audio:
-                currentSong.audio?.currentSrc ||
-                currentSong.audio?.src ||
-                currentSong.audioUrl,
-            },
-          ];
-
-      try {
-        localStorage.setItem(
-          "likedSongs",
-          JSON.stringify(next)
+      if (exists) {
+        return previous.filter(
+          (song) => song?.id !== songId
         );
-      } catch {}
+      }
 
-      return next;
+      return [
+        ...previous,
+        {
+          id: songId,
+          name: songName,
+          artist: artistNames,
+          image: artwork,
+          audio:
+            audio?.currentSrc ||
+            audio?.src ||
+            currentSong?.audio ||
+            "",
+        },
+      ];
     });
   };
 
-  /* --------------------------------
-     Share
-  -------------------------------- */
-  const share = async () => {
-    const albumId =
-      detail?.album?.id ||
-      currentSong?.album?.id;
+  /* =======================================================
+     SHARE
+  ======================================================= */
 
-    const url = albumId
-      ? `${window.location.origin}/albums/${albumId}`
-      : window.location.href;
+  const share = async () => {
+    const shareData = {
+      title: songName,
+      text: `${songName} - ${artistNames}`,
+      url: window.location.href,
+    };
 
     try {
-      if (navigator.share) {
-        await navigator.share({
-          title: songName,
-          text: `Listen to ${songName} on MusicMax`,
-          url,
-        });
-      } else if (navigator.clipboard) {
-        await navigator.clipboard.writeText(url);
+      if (
+        navigator.share &&
+        typeof navigator.share === "function"
+      ) {
+        await navigator.share(
+          shareData
+        );
+        return;
+      }
+
+      if (
+        navigator.clipboard &&
+        navigator.clipboard.writeText
+      ) {
+        await navigator.clipboard.writeText(
+          window.location.href
+        );
+
+        alert(
+          "Song link copied to clipboard!"
+        );
       }
     } catch (error) {
-      if (error?.name !== "AbortError") {
-        console.error("Share failed:", error);
+      // User cancelled share
+      if (
+        error?.name !==
+        "AbortError"
+      ) {
+        console.error(
+          "Share error:",
+          error
+        );
       }
     }
   };
 
-  /* --------------------------------
-     Active lyric
-  -------------------------------- */
-  const activeLyricIndex = useMemo(() => {
-    if (!lyrics?.synced || !Array.isArray(lyrics.lines)) {
-      return -1;
-    }
+  /* =======================================================
+     DOWNLOAD
+  ======================================================= */
 
-    let active = -1;
-
-    lyrics.lines.forEach((line, index) => {
-      if (Number(line?.time) <= currentTime) {
-        active = index;
+  const handleDownload = async () => {
+    try {
+      if (typeof downloadSong === "function") {
+        await downloadSong(
+          currentSong
+        );
       }
-    });
+    } catch (error) {
+      console.error(
+        "Download error:",
+        error
+      );
+    }
+  };
 
-    return active;
-  }, [lyrics, currentTime]);
+  /* =======================================================
+     REPEAT ICON
+  ======================================================= */
 
-  if (!currentSong) return null;
+  const RepeatIcon =
+    repeatMode === "one"
+      ? LuRepeat1
+      : LuRepeat;
 
-  const suggestionList = Array.isArray(suggestions)
-    ? suggestions
-    : [];
+  /* =======================================================
+     NO SONG
+  ======================================================= */
+
+  if (!currentSong) {
+    return null;
+  }
+
+  /* =======================================================
+     FULL SCREEN PLAYER
+  ======================================================= */
 
   return (
-    <div className="fixed bottom-0 left-0 z-[999] w-full">
+    <>
+      {/* ===================================================
+          FULL PLAYER
+      ================================================== */}
 
-      {/* ==========================================
-          MINI PLAYER
-      ========================================== */}
-      {!isMaximized && (
-        <div className="relative overflow-hidden border-t border-white/10 bg-[#100b0d]/95 px-3 py-2 shadow-[0_-10px_40px_rgba(0,0,0,0.45)] backdrop-blur-xl lg:px-6">
-
-          <div className="mx-auto flex max-w-[1600px] items-center gap-3">
-
-            {/* Cover */}
-            <button
-              type="button"
-              onClick={() => setIsMaximized(true)}
-              className="relative shrink-0 overflow-hidden rounded-lg"
-            >
-              <img
-                src={artwork}
-                alt={songName}
-                className="h-12 w-12 object-cover"
-                onError={(e) => {
-                  e.currentTarget.src =
-                    "/Unknown.png";
-                }}
-              />
-
-              <div className="absolute inset-0 grid place-items-center bg-black/20">
-                <CiMaximize1 className="text-white" />
-              </div>
-            </button>
-
-            {/* Song info */}
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold text-white">
-                {songName}
-              </div>
-
-              <div className="truncate text-xs text-white/55">
-                {artistNames}
-              </div>
-
-              <div className="mt-1 hidden items-center gap-2 sm:flex">
-                <span className="text-[10px] text-white/50">
-                  {formatTime(currentTime)}
-                </span>
-
-                <input
-                  aria-label="Song progress"
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={progress}
-                  onChange={seek}
-                  className="range w-full accent-red-500"
-                />
-
-                <span className="text-[10px] text-white/50">
-                  {formatTime(duration)}
-                </span>
-              </div>
-            </div>
-
-            {/* Controls */}
-            <button
-              type="button"
-              onClick={prevSong}
-              className="hidden text-white/70 transition hover:text-white sm:block"
-              title="Previous"
-            >
-              <IoMdSkipBackward className="text-2xl" />
-            </button>
-
-            <button
-              type="button"
-              onClick={playPause}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white text-black transition hover:scale-105"
-              title={isPlaying ? "Pause" : "Play"}
-            >
-              {isPlaying ? (
-                <FaPause className="text-sm" />
-              ) : (
-                <FaPlay className="ml-0.5 text-sm" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={nextSong}
-              className="hidden text-white/70 transition hover:text-white sm:block"
-              title="Next"
-            >
-              <IoMdSkipForward className="text-2xl" />
-            </button>
-
-            <button
-              type="button"
-              onClick={toggleLike}
-              className="hidden sm:block"
-              title="Like"
-            >
-              {isLiked ? (
-                <FaHeart className="text-xl text-red-500" />
-              ) : (
-                <FaRegHeart className="text-xl text-white/70" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setIsMaximized(true)}
-              className="text-white/70"
-              title="Open player"
-            >
-              <CiMaximize1 className="text-xl" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ==========================================
-          FULL SCREEN / MAXIMIZED PLAYER
-      ========================================== */}
       {isMaximized && (
-        <div className="fixed inset-0 overflow-hidden bg-black">
-
-          {/* Blurred album background */}
+        <div
+          ref={scrollRef}
+          className="
+            fixed
+            inset-0
+            z-[9999]
+            overflow-hidden
+            bg-black
+            text-white
+          "
+        >
+          {/* Background Artwork */}
           <div
-            className="absolute inset-0 scale-110 bg-cover bg-center opacity-35 blur-3xl"
+            className="
+              absolute
+              inset-0
+              scale-110
+              bg-cover
+              bg-center
+              opacity-35
+              blur-3xl
+            "
             style={{
               backgroundImage: `url("${artwork}")`,
             }}
           />
 
-          {/* Dark gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-[#140b0d]/85 to-[#090607]" />
+          {/* Dark Overlay */}
+          <div
+            className="
+              absolute
+              inset-0
+              bg-black/75
+              backdrop-blur-xl
+            "
+          />
 
-          {/* Main content */}
-          <div className="relative z-10 flex h-full flex-col overflow-y-auto">
+          {/* Content */}
+          <div
+            className="
+              relative
+              z-10
+              flex
+              h-full
+              flex-col
+            "
+          >
+            {/* =========================================
+                HEADER
+            ========================================= */}
 
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-4 sm:px-8">
-
+            <div
+              className="
+                flex
+                items-center
+                justify-between
+                px-4
+                py-4
+                sm:px-8
+              "
+            >
               <button
                 type="button"
-                onClick={() => setIsMaximized(false)}
-                className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white backdrop-blur-md transition hover:bg-white/20"
-                title="Close player"
+                onClick={() =>
+                  setIsMaximized(false)
+                }
+                className="
+                  rounded-full
+                  bg-white/10
+                  p-2
+                  text-white
+                  transition
+                  hover:bg-white/20
+                  active:scale-95
+                "
+                aria-label="Close player"
               >
-                <MdKeyboardArrowDown className="text-2xl" />
+                <MdKeyboardArrowDown
+                  size={28}
+                />
               </button>
 
-              <div className="text-center">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/50">
+              <div
+                className="
+                  text-center
+                "
+              >
+                <p
+                  className="
+                    text-[10px]
+                    font-semibold
+                    uppercase
+                    tracking-[0.3em]
+                    text-white/50
+                  "
+                >
                   Now Playing
                 </p>
-                <p className="mt-1 text-xs text-white/70">
-                  MusicMax
+
+                <p
+                  className="
+                    mt-1
+                    max-w-[180px]
+                    truncate
+                    text-xs
+                    font-medium
+                    text-white/80
+                    sm:max-w-[300px]
+                  "
+                >
+                  {songName}
                 </p>
               </div>
 
               <button
                 type="button"
                 onClick={share}
-                className="grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white backdrop-blur-md transition hover:bg-white/20"
-                title="Share"
+                className="
+                  rounded-full
+                  bg-white/10
+                  p-2
+                  text-white
+                  transition
+                  hover:bg-white/20
+                  active:scale-95
+                "
+                aria-label="Share song"
               >
-                <IoShareSocial className="text-xl" />
+                <IoShareSocial
+                  size={20}
+                />
               </button>
             </div>
 
-            {/* Player body */}
-            <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col px-4 pb-8">
+            {/* =========================================
+                COVER / LYRICS AREA
+            ========================================= */}
 
-              {/* Cover / Lyrics area */}
-              <div className="relative mt-2 flex min-h-[360px] flex-1 items-center justify-center sm:mt-4">
-
-                {!showLyrics ? (
-                  /* COVER */
-                  <div className="relative">
-
-                    <div className="absolute inset-0 scale-95 rounded-[32px] bg-red-500/30 blur-3xl" />
-
-                    <img
-                      src={artwork}
-                      alt={songName}
-                      className="relative h-[min(72vw,390px)] w-[min(72vw,390px)] rounded-[28px] object-cover shadow-[0_25px_80px_rgba(0,0,0,0.7)] ring-1 ring-white/15"
-                      onError={(e) => {
-                        e.currentTarget.src =
-                          "/Unknown.png";
-                      }}
-                    />
-                  </div>
-                ) : (
-                  /* LYRICS */
-                  <div className="flex h-[min(70vh,480px)] w-full max-w-xl flex-col overflow-hidden rounded-[28px] border border-white/10 bg-black/25 p-4 shadow-2xl backdrop-blur-xl sm:p-6">
-
-                    <div className="mb-4 text-center">
-                      <p className="text-xs font-semibold uppercase tracking-[0.25em] text-red-300">
-                        Lyrics
-                      </p>
+            <div
+              className="
+                flex
+                min-h-0
+                flex-1
+                flex-col
+                px-4
+                pb-4
+                sm:px-8
+              "
+            >
+              {/* COVER */}
+              {!showLyrics && (
+                <div
+                  className="
+                    flex
+                    min-h-0
+                    flex-1
+                    items-center
+                    justify-center
+                  "
+                >
+                  <div
+                    className="
+                      w-[min(78vw,380px)]
+                      sm:w-[min(55vw,430px)]
+                    "
+                  >
+                    <div
+                      className="
+                        overflow-hidden
+                        rounded-[28px]
+                        bg-white/10
+                        shadow-2xl
+                        ring-1
+                        ring-white/10
+                      "
+                    >
+                      <img
+                        src={artwork}
+                        alt={songName}
+                        className="
+                          aspect-square
+                          w-full
+                          object-cover
+                        "
+                        onError={(event) => {
+                          event.currentTarget.src =
+                            "/Unknown.png";
+                        }}
+                      />
                     </div>
 
                     <div
-                      className="flex-1 overflow-y-auto px-1"
-                      style={{
-                        scrollbarWidth: "thin",
-                      }}
+                      className="
+                        mt-5
+                        text-center
+                      "
                     >
-                      {lyrics?.synced &&
-                      Array.isArray(lyrics.lines) &&
-                      lyrics.lines.length > 0 ? (
-                        <div className="space-y-2 py-8">
-                          {lyrics.lines.map(
-                            (line, index) => {
-                              const active =
-                                index ===
-                                activeLyricIndex;
+                      <h1
+                        className="
+                          truncate
+                          text-xl
+                          font-bold
+                          sm:text-2xl
+                        "
+                      >
+                        {songName}
+                      </h1>
 
-                              return (
-                                <p
-                                  key={`${line?.time}-${index}`}
-                                  className={`
-                                    rounded-2xl px-4 py-3
-                                    text-center
-                                    text-base
-                                    leading-7
-                                    transition-all
-                                    duration-300
-                                    sm:text-lg
-                                    ${
-                                      active
-                                        ? "scale-[1.02] bg-red-300/20 font-bold text-red-50 shadow-[0_8px_30px_rgba(248,113,113,0.12)] ring-1 ring-red-300/20"
-                                        : "text-white/35"
-                                    }
-                                  `}
-                                >
-                                  {safeDecode(
-                                    line?.text ||
-                                      ""
-                                  )}
-                                </p>
-                              );
-                            }
-                          )}
-                        </div>
-                      ) : lyrics?.plain ? (
-                        <div className="whitespace-pre-line px-3 py-8 text-center text-base leading-8 text-white/80 sm:text-lg">
-                          {safeDecode(lyrics.plain)}
-                        </div>
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-center text-white/45">
-                          <div>
-                            <p className="text-lg">
-                              No lyrics available
-                            </p>
-                            <p className="mt-2 text-sm text-white/30">
-                              Lyrics are not available for this song.
-                            </p>
-                          </div>
-                        </div>
-                      )}
+                      <p
+                        className="
+                          mt-1
+                          truncate
+                          text-sm
+                          text-white/60
+                        "
+                      >
+                        {artistNames}
+                      </p>
                     </div>
                   </div>
-                )}
-              </div>
-
-              {/* Song information */}
-              <div className="mt-5 text-center">
-
-                <h1 className="truncate text-2xl font-bold text-white sm:text-3xl">
-                  {songName}
-                </h1>
-
-                <p className="mt-1 truncate text-sm text-white/55 sm:text-base">
-                  {artistNames}
-                </p>
-              </div>
-
-              {/* Progress */}
-              <div className="mt-6">
-
-                <input
-                  aria-label="Song progress"
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={progress}
-                  onChange={seek}
-                  className="h-1.5 w-full cursor-pointer accent-red-500"
-                />
-
-                <div className="mt-2 flex justify-between text-[11px] text-white/45">
-                  <span>
-                    {formatTime(currentTime)}
-                  </span>
-                  <span>
-                    {formatTime(duration)}
-                  </span>
                 </div>
-              </div>
+              )}
 
-              {/* Main controls */}
-              <div className="mt-5 flex items-center justify-center gap-6 sm:gap-9">
+              {/* =======================================
+                  LYRICS
+              ======================================= */}
 
-                <button
-                  type="button"
-                  onClick={toggleShuffle}
-                  className={`transition hover:scale-110 ${
-                    shuffle
-                      ? "text-red-400"
-                      : "text-white/55"
-                  }`}
-                  title="Shuffle"
+              {showLyrics && (
+                <div
+                  ref={lyricContainerRef}
+                  className="
+                    flex-1
+                    min-h-0
+                    overflow-y-auto
+                    px-1
+                    scroll-smooth
+                  "
+                  style={{
+                    scrollbarWidth: "thin",
+                    scrollBehavior: "smooth",
+                  }}
                 >
-                  <PiShuffleBold className="text-xl" />
-                </button>
+                  <div
+                    className="
+                      mx-auto
+                      flex
+                      min-h-full
+                      max-w-2xl
+                      flex-col
+                      justify-center
+                      gap-2
+                      py-20
+                    "
+                  >
+                    {lyrics?.synced &&
+                    Array.isArray(
+                      lyrics?.lines
+                    ) &&
+                    lyrics.lines.length > 0 ? (
+                      lyrics.lines.map(
+                        (line, index) => {
+                          const active =
+                            index ===
+                            activeLyricIndex;
 
-                <button
-                  type="button"
-                  onClick={prevSong}
-                  className="text-white transition hover:scale-110"
-                  title="Previous"
+                          return (
+                            <p
+                              key={`${line?.time}-${index}`}
+                              className={`
+                                mx-auto
+                                max-w-xl
+                                rounded-2xl
+                                px-5
+                                py-3
+                                text-center
+                                leading-7
+                                transition-all
+                                duration-500
+                                ease-out
+                                ${
+                                  active
+                                    ? `
+                                      scale-[1.03]
+                                      bg-red-300/20
+                                      font-bold
+                                      text-red-50
+                                      shadow-[0_8px_30px_rgba(248,113,113,0.15)]
+                                      ring-1
+                                      ring-red-300/20
+                                    `
+                                    : `
+                                      text-white/35
+                                      hover:text-white/60
+                                    `
+                                }
+                              `}
+                            >
+                              {safeDecode(
+                                line?.text ||
+                                  ""
+                              )}
+                            </p>
+                          );
+                        }
+                      )
+                    ) : lyrics?.text ? (
+                      <p
+                        className="
+                          whitespace-pre-wrap
+                          text-center
+                          text-base
+                          leading-8
+                          text-white/80
+                        "
+                      >
+                        {safeDecode(
+                          lyrics.text
+                        )}
+                      </p>
+                    ) : (
+                      <div
+                        className="
+                          flex
+                          min-h-[50vh]
+                          items-center
+                          justify-center
+                          text-center
+                        "
+                      >
+                        <div>
+                          <p
+                            className="
+                              text-lg
+                              font-semibold
+                              text-white/70
+                            "
+                          >
+                            Lyrics unavailable
+                          </p>
+
+                          <p
+                            className="
+                              mt-2
+                              text-sm
+                              text-white/40
+                            "
+                          >
+                            Lyrics are not
+                            available for
+                            this song.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* =======================================
+                  COVER / LYRICS SWITCH
+              ======================================= */}
+
+              <div
+                className="
+                  flex
+                  justify-center
+                  py-3
+                "
+              >
+                <div
+                  className="
+                    flex
+                    rounded-full
+                    border
+                    border-white/10
+                    bg-black/30
+                    p-1
+                    shadow-lg
+                    backdrop-blur-xl
+                  "
                 >
-                  <IoMdSkipBackward className="text-3xl" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={playPause}
-                  className="grid h-16 w-16 place-items-center rounded-full bg-white text-black shadow-[0_10px_35px_rgba(255,255,255,0.18)] transition hover:scale-105"
-                  title={isPlaying ? "Pause" : "Play"}
-                >
-                  {isPlaying ? (
-                    <FaPause className="text-xl" />
-                  ) : (
-                    <FaPlay className="ml-1 text-xl" />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={nextSong}
-                  className="text-white transition hover:scale-110"
-                  title="Next"
-                >
-                  <IoMdSkipForward className="text-3xl" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={toggleRepeatMode}
-                  className={`transition hover:scale-110 ${
-                    repeatMode === "one"
-                      ? "text-red-400"
-                      : "text-white/55"
-                  }`}
-                  title="Repeat"
-                >
-                  {repeatMode === "one" ? (
-                    <LuRepeat1 className="text-xl" />
-                  ) : (
-                    <LuRepeat className="text-xl" />
-                  )}
-                </button>
-              </div>
-
-              {/* Volume */}
-              <div className="mx-auto mt-5 flex w-full max-w-sm items-center gap-3">
-
-                <PiSpeakerLowFill className="shrink-0 text-white/50" />
-
-                <input
-                  aria-label="Volume"
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={volume}
-                  onChange={changeVolume}
-                  className="h-1 w-full cursor-pointer accent-red-500"
-                />
-
-                <span className="w-8 text-right text-[10px] text-white/40">
-                  {volume}
-                </span>
-              </div>
-
-              {/* Bottom actions */}
-              <div className="mt-5 flex items-center justify-center gap-6">
-
-                <button
-                  type="button"
-                  onClick={toggleLike}
-                  className="grid h-10 w-10 place-items-center rounded-full bg-white/5 text-white/70 transition hover:bg-white/10"
-                  title="Like"
-                >
-                  {isLiked ? (
-                    <FaHeart className="text-red-500" />
-                  ) : (
-                    <FaRegHeart />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={downloadSong}
-                  className="grid h-10 w-10 place-items-center rounded-full bg-white/5 text-white/70 transition hover:bg-white/10"
-                  title="Download"
-                >
-                  <MdDownload className="text-xl" />
-                </button>
-              </div>
-
-              {/* ======================================
-                  COVER / LYRICS SWITCH - BOTTOM
-              ====================================== */}
-              <div className="mt-6 flex justify-center">
-
-                <div className="flex rounded-full border border-white/10 bg-black/30 p-1 shadow-lg backdrop-blur-xl">
-
                   <button
                     type="button"
-                    onClick={() => setShowLyrics(false)}
+                    onClick={() =>
+                      setShowLyrics(false)
+                    }
                     className={`
-                      rounded-full px-7 py-2.5
-                      text-sm font-medium
-                      transition-all duration-300
+                      rounded-full
+                      px-5
+                      py-2
+                      text-xs
+                      font-semibold
+                      transition-all
                       ${
                         !showLyrics
-                          ? "bg-white text-black shadow-lg"
-                          : "text-white/50 hover:text-white"
+                          ? `
+                            bg-white
+                            text-black
+                            shadow
+                          `
+                          : `
+                            text-white/50
+                            hover:text-white
+                          `
                       }
                     `}
                   >
@@ -948,148 +1303,710 @@ const Player = () => {
 
                   <button
                     type="button"
-                    onClick={() => setShowLyrics(true)}
+                    onClick={() =>
+                      setShowLyrics(true)
+                    }
                     className={`
-                      rounded-full px-7 py-2.5
-                      text-sm font-medium
-                      transition-all duration-300
+                      rounded-full
+                      px-5
+                      py-2
+                      text-xs
+                      font-semibold
+                      transition-all
                       ${
                         showLyrics
-                          ? "bg-red-400 text-white shadow-[0_5px_25px_rgba(248,113,113,0.25)]"
-                          : "text-white/50 hover:text-white"
+                          ? `
+                            bg-white
+                            text-black
+                            shadow
+                          `
+                          : `
+                            text-white/50
+                            hover:text-white
+                          `
                       }
                     `}
                   >
                     Lyrics
                   </button>
-
                 </div>
               </div>
+            </div>
 
-              {/* Album */}
-              {detail?.album?.id && (
-                <Link
-                  to={`/albums/${detail.album.id}`}
-                  className="mt-7 block"
+            {/* =========================================
+                BOTTOM PLAYER
+            ========================================= */}
+
+            <div
+              className="
+                px-4
+                pb-5
+                sm:px-8
+              "
+            >
+              {/* Song info */}
+              <div
+                className="
+                  mb-3
+                  flex
+                  items-center
+                  justify-between
+                  gap-3
+                "
+              >
+                <div
+                  className="
+                    min-w-0
+                    flex-1
+                  "
                 >
-                  <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3 transition hover:bg-white/10">
-
-                    <img
-                      src={
-                        detail.album.image?.[0]?.url ||
-                        artwork
-                      }
-                      alt=""
-                      className="h-14 w-14 rounded-xl object-cover"
-                    />
-
-                    <div className="min-w-0">
-                      <p className="text-[10px] uppercase tracking-wider text-white/40">
-                        From Album
-                      </p>
-
-                      <p className="truncate text-sm font-semibold text-white">
-                        {safeDecode(
-                          detail.album.name
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                </Link>
-              )}
-
-              {/* Suggestions */}
-              {suggestionList.length > 0 && (
-                <div className="mt-7 w-full">
-
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-white">
-                      You Might Like
-                    </h3>
-
-                    <div className="hidden gap-1 lg:flex">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          scrollRef.current?.scrollBy({
-                            left: -500,
-                            behavior: "smooth",
-                          })
-                        }
-                        className="grid h-8 w-8 place-items-center rounded-full bg-white/5"
-                      >
-                        <span className="text-white/60">
-                          ‹
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          scrollRef.current?.scrollBy({
-                            left: 500,
-                            behavior: "smooth",
-                          })
-                        }
-                        className="grid h-8 w-8 place-items-center rounded-full bg-white/5"
-                      >
-                        <span className="text-white/60">
-                          ›
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div
-                    ref={scrollRef}
-                    className="flex gap-3 overflow-x-auto pb-2"
-                    style={{
-                      scrollbarWidth: "none",
-                    }}
+                  <p
+                    className="
+                      truncate
+                      text-base
+                      font-bold
+                    "
                   >
-                    {suggestionList.map(
-                      (item, index) => (
-                        <SongGrid
-                          key={
-                            item?.id || index
-                          }
-                          song={item}
-                        />
-                      )
-                    )}
-                  </div>
+                    {songName}
+                  </p>
+
+                  <p
+                    className="
+                      truncate
+                      text-xs
+                      text-white/50
+                    "
+                  >
+                    {artistNames}
+                  </p>
                 </div>
-              )}
 
-              {/* Artists */}
-              {currentSong?.artists?.primary
-                ?.length > 0 && (
-                <div className="mt-7 w-full">
+                <button
+                  type="button"
+                  onClick={toggleLike}
+                  className="
+                    shrink-0
+                    p-2
+                    text-white
+                    transition
+                    active:scale-90
+                  "
+                  aria-label={
+                    isLiked
+                      ? "Unlike"
+                      : "Like"
+                  }
+                >
+                  {isLiked ? (
+                    <FaHeart
+                      className="
+                        text-red-400
+                      "
+                    />
+                  ) : (
+                    <FaRegHeart />
+                  )}
+                </button>
+              </div>
 
-                  <h3 className="mb-3 text-sm font-semibold text-white">
-                    Artists
-                  </h3>
+              {/* Progress */}
+              <div
+                className="
+                  flex
+                  items-center
+                  gap-2
+                "
+              >
+                <span
+                  className="
+                    w-10
+                    text-right
+                    text-[10px]
+                    text-white/50
+                  "
+                >
+                  {formatTime(
+                    currentTime
+                  )}
+                </span>
 
-                  <div className="flex gap-4 overflow-x-auto pb-2">
-                    {currentSong.artists.primary.map(
-                      (artist, index) => (
-                        <ArtistItems
-                          key={
-                            artist?.id || index
-                          }
-                          {...artist}
-                        />
-                      )
-                    )}
-                  </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={progress}
+                  onChange={seek}
+                  className="
+                    h-1
+                    flex-1
+                    cursor-pointer
+                    accent-red-400
+                  "
+                  aria-label="Song progress"
+                />
+
+                <span
+                  className="
+                    w-10
+                    text-[10px]
+                    text-white/50
+                  "
+                >
+                  {formatTime(
+                    audioDuration
+                  )}
+                </span>
+              </div>
+
+              {/* Controls */}
+              <div
+                className="
+                  mt-3
+                  flex
+                  items-center
+                  justify-center
+                  gap-4
+                  sm:gap-6
+                "
+              >
+                <button
+                  type="button"
+                  onClick={toggleShuffle}
+                  className={`
+                    transition
+                    active:scale-90
+                    ${
+                      shuffle
+                        ? "text-red-400"
+                        : "text-white/50"
+                    }
+                  `}
+                  aria-label="Shuffle"
+                >
+                  <PiShuffleBold
+                    size={18}
+                  />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={prevSong}
+                  className="
+                    text-white
+                    transition
+                    active:scale-90
+                  "
+                  aria-label="Previous"
+                >
+                  <IoMdSkipBackward
+                    size={25}
+                  />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={playPause}
+                  className="
+                    flex
+                    h-14
+                    w-14
+                    items-center
+                    justify-center
+                    rounded-full
+                    bg-white
+                    text-black
+                    shadow-xl
+                    transition
+                    hover:scale-105
+                    active:scale-95
+                  "
+                  aria-label={
+                    isPlaying
+                      ? "Pause"
+                      : "Play"
+                  }
+                >
+                  {isPlaying ? (
+                    <FaPause size={18} />
+                  ) : (
+                    <FaPlay
+                      size={18}
+                      className="ml-1"
+                    />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={nextSong}
+                  className="
+                    text-white
+                    transition
+                    active:scale-90
+                  "
+                  aria-label="Next"
+                >
+                  <IoMdSkipForward
+                    size={25}
+                  />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={toggleRepeatMode}
+                  className={`
+                    transition
+                    active:scale-90
+                    ${
+                      repeatMode !== "off"
+                        ? "text-red-400"
+                        : "text-white/50"
+                    }
+                  `}
+                  aria-label="Repeat"
+                >
+                  <RepeatIcon
+                    size={19}
+                  />
+                </button>
+              </div>
+
+              {/* Extra controls */}
+              <div
+                className="
+                  mt-4
+                  flex
+                  items-center
+                  justify-between
+                "
+              >
+                <div
+                  className="
+                    flex
+                    items-center
+                    gap-2
+                  "
+                >
+                  <PiSpeakerLowFill
+                    size={17}
+                    className="
+                      text-white/50
+                    "
+                  />
+
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={volume * 100}
+                    onChange={changeVolume}
+                    className="
+                      w-20
+                      cursor-pointer
+                      accent-red-400
+                      sm:w-28
+                    "
+                    aria-label="Volume"
+                  />
                 </div>
-              )}
 
+                <div
+                  className="
+                    flex
+                    items-center
+                    gap-1
+                  "
+                >
+                  <button
+                    type="button"
+                    onClick={
+                      handleDownload
+                    }
+                    className="
+                      rounded-full
+                      p-2
+                      text-white/60
+                      transition
+                      hover:bg-white/10
+                      hover:text-white
+                    "
+                    aria-label="Download"
+                  >
+                    <MdDownload
+                      size={21}
+                    />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={share}
+                    className="
+                      rounded-full
+                      p-2
+                      text-white/60
+                      transition
+                      hover:bg-white/10
+                      hover:text-white
+                    "
+                    aria-label="Share"
+                  >
+                    <IoShareSocial
+                      size={19}
+                    />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
-    </div>
+
+      {/* =================================================
+          MINI PLAYER
+      ================================================= */}
+
+      <div
+        className="
+          fixed
+          bottom-0
+          left-0
+          right-0
+          z-[999]
+          border-t
+          border-white/10
+          bg-black/80
+          backdrop-blur-2xl
+        "
+      >
+        {/* Progress */}
+        <div
+          className="
+            absolute
+            left-0
+            right-0
+            top-0
+            h-[2px]
+            bg-white/10
+          "
+        >
+          <div
+            className="
+              h-full
+              bg-red-400
+              transition-[width]
+              duration-200
+            "
+            style={{
+              width: `${progress}%`,
+            }}
+          />
+        </div>
+
+        <div
+          className="
+            mx-auto
+            flex
+            max-w-7xl
+            items-center
+            gap-3
+            px-3
+            py-2
+            pt-3
+            sm:px-5
+          "
+        >
+          {/* Artwork */}
+          <button
+            type="button"
+            onClick={() =>
+              setIsMaximized(true)
+            }
+            className="
+              relative
+              h-12
+              w-12
+              shrink-0
+              overflow-hidden
+              rounded-lg
+              bg-white/10
+            "
+          >
+            <img
+              src={artwork}
+              alt={songName}
+              className="
+                h-full
+                w-full
+                object-cover
+              "
+              onError={(event) => {
+                event.currentTarget.src =
+                  "/Unknown.png";
+              }}
+            />
+          </button>
+
+          {/* Song info */}
+          <div
+            className="
+              min-w-0
+              flex-1
+            "
+          >
+            <p
+              className="
+                truncate
+                text-sm
+                font-semibold
+                text-white
+              "
+            >
+              {songName}
+            </p>
+
+            <p
+              className="
+                truncate
+                text-[11px]
+                text-white/50
+              "
+            >
+              {artistNames}
+            </p>
+          </div>
+
+          {/* Desktop like */}
+          <button
+            type="button"
+            onClick={toggleLike}
+            className="
+              hidden
+              p-2
+              text-white/60
+              transition
+              hover:text-white
+              sm:block
+            "
+            aria-label={
+              isLiked
+                ? "Unlike"
+                : "Like"
+            }
+          >
+            {isLiked ? (
+              <FaHeart
+                className="
+                  text-red-400
+                "
+              />
+            ) : (
+              <FaRegHeart />
+            )}
+          </button>
+
+          {/* Previous */}
+          <button
+            type="button"
+            onClick={prevSong}
+            className="
+              hidden
+              p-2
+              text-white/70
+              transition
+              hover:text-white
+              sm:block
+            "
+            aria-label="Previous"
+          >
+            <IoMdSkipBackward
+              size={20}
+            />
+          </button>
+
+          {/* Play */}
+          <button
+            type="button"
+            onClick={playPause}
+            className="
+              flex
+              h-10
+              w-10
+              shrink-0
+              items-center
+              justify-center
+              rounded-full
+              bg-white
+              text-black
+              transition
+              active:scale-90
+            "
+            aria-label={
+              isPlaying
+                ? "Pause"
+                : "Play"
+            }
+          >
+            {isPlaying ? (
+              <FaPause size={14} />
+            ) : (
+              <FaPlay
+                size={14}
+                className="ml-0.5"
+              />
+            )}
+          </button>
+
+          {/* Next */}
+          <button
+            type="button"
+            onClick={nextSong}
+            className="
+              hidden
+              p-2
+              text-white/70
+              transition
+              hover:text-white
+              sm:block
+            "
+            aria-label="Next"
+          >
+            <IoMdSkipForward
+              size={20}
+            />
+          </button>
+
+          {/* Maximize */}
+          <button
+            type="button"
+            onClick={() =>
+              setIsMaximized(true)
+            }
+            className="
+              rounded-full
+              p-2
+              text-white/60
+              transition
+              hover:bg-white/10
+              hover:text-white
+            "
+            aria-label="Open full player"
+          >
+            <CiMaximize1
+              size={21}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* =================================================
+          CONTENT BELOW PLAYER
+      ================================================= */}
+
+      <div
+        className="
+          mx-auto
+          max-w-7xl
+          px-4
+          pb-28
+          pt-6
+        "
+      >
+        {/* Song detail */}
+        {detail && (
+          <div
+            className="
+              mb-8
+            "
+          >
+            {detail?.album?.id && (
+              <Link
+                to={`/album/${detail.album.id}`}
+                className="
+                  inline-block
+                  text-xs
+                  text-white/50
+                  transition
+                  hover:text-white
+                "
+              >
+                {safeDecode(
+                  detail.album.name ||
+                    "Album"
+                )}
+              </Link>
+            )}
+          </div>
+        )}
+
+        {/* Suggestions */}
+        {suggestions.length > 0 && (
+          <section
+            className="
+              mb-8
+            "
+          >
+            <h2
+              className="
+                mb-4
+                text-lg
+                font-bold
+                text-white
+              "
+            >
+              You may also like
+            </h2>
+
+            <SongGrid
+              songs={suggestions}
+            />
+          </section>
+        )}
+
+        {/* Artists */}
+        {detail?.artists?.primary &&
+          Array.isArray(
+            detail.artists.primary
+          ) &&
+          detail.artists.primary.length >
+            0 && (
+            <section>
+              <h2
+                className="
+                  mb-4
+                  text-lg
+                  font-bold
+                  text-white
+                "
+              >
+                Artists
+              </h2>
+
+              <div
+                className="
+                  grid
+                  grid-cols-2
+                  gap-4
+                  sm:grid-cols-4
+                  md:grid-cols-6
+                "
+              >
+                {detail.artists.primary.map(
+                  (artist) => (
+                    <ArtistItems
+                      key={
+                        artist?.id ||
+                        artist?.name
+                      }
+                      artist={artist}
+                    />
+                  )
+                )}
+              </div>
+            </section>
+          )}
+      </div>
+    </>
   );
 };
 
