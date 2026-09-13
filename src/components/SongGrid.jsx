@@ -1,103 +1,43 @@
 import { useContext } from "react";
-import he from "he";
 import MusicContext from "../context/MusicContext";
-import { extractImageUrl, extractAudioUrl, extractArtistNames } from "../utils/song";
+import he from "he";
 
-const safeDecode = (value) => {
-  try {
-    return he.decode(String(value ?? ""));
-  } catch {
-    return String(value ?? "");
-  }
-};
+const SongGrid = ({ name, artists, duration, downloadUrl, image, id , song }) => {
+  
+  const { playMusic } = useContext(MusicContext);
 
-const SongGrid = ({ song, queue, ...legacyProps }) => {
-  const { playMusic } = useContext(MusicContext) || {};
+  const imageUrl = image[2]?.url || image; 
+  const artistNames = Array.isArray(artists?.primary)
+    ? artists?.primary.map((artist) => artist.name).join(", ")
+    : "Unknown Artist";
 
-  // Prefer the explicit `song` object; fall back to legacy spread-props API.
-  const item =
-    song && typeof song === "object" && !Array.isArray(song)
-      ? song
-      : legacyProps;
-
-  const songName =
-    item?.name || item?.title || legacyProps?.name || legacyProps?.title || "Unknown Song";
-
-  const songImage = extractImageUrl(item?.image || legacyProps?.image);
-
-  const artistNames = extractArtistNames(
-    item?.artists || item?.artist || legacyProps?.artists || legacyProps?.artist
-  );
-
-  const handlePlay = () => {
-    if (typeof playMusic !== "function") return;
-
-    const url = extractAudioUrl(item);
-    if (!url) {
-      console.error("No playable audio URL for:", item);
-      return;
-    }
-
-    const duration =
-      Number(item?.duration) || Number(item?.durationInSeconds) || 0;
-
-    const artists =
-      item?.artists?.primary ||
-      item?.artists?.all ||
-      item?.artists ||
-      item?.artist ||
-      [];
-
-    // Matches the 7-positional-arg convention used in PlaylistDetails.jsx.
-    // TODO: refactor MusicContext.playMusic to take an object.
-    playMusic(
-      url,
-      songName,
-      duration,
-      songImage,
-      item?.id,
-      artists,
-      queue ?? null
-    );
-  };
-
+ 
+    downloadUrl = downloadUrl ? downloadUrl[4]?.url ||  downloadUrl: song.audio;
   return (
-    <button
-      type="button"
-      className="card w-[9.5rem] h-[11.9rem] overflow-hidden p-1 rounded-lg cursor-pointer shadow-md text-left"
-      onClick={handlePlay}
+    <span
+      className="card w-[9.5rem] h-[11.9rem] overflow-clip p-1  rounded-lg cursor-pointer shadow-md"
+      onClick={() =>
+        playMusic(downloadUrl, name, duration, imageUrl, id, artists , song)
+      }
     >
-      <div className="p-1">
-        <img
-          src={songImage}
-          alt={songName}
-          className="w-full aspect-square rounded-lg object-cover"
-          loading="lazy"
-          onError={(e) => {
-            const img = e.currentTarget;
-            if (img.dataset.fallback === "true") return;
-            img.dataset.fallback = "true";
-            img.src = "/Unknown.png";
-          }}
-        />
-      </div>
+      <div className="">
+        <div className="p-1">
+          <img
+            src={imageUrl}
+            alt=""
+            className=" top-0 rounded-lg imgs  "
+          />
 
-      <div className="px-2 text-[13px]">
-        <div className="font-semibold overflow-hidden whitespace-nowrap text-ellipsis">
-          {safeDecode(songName)}
-        </div>
-
-        <div className="overflow-hidden whitespace-nowrap text-ellipsis">
-          {artistNames && artistNames !== "Unknown Artist" ? (
-            <>
-              by <span className="font-semibold">{safeDecode(artistNames)}</span>
-            </>
-          ) : (
-            <span className="opacity-60">Unknown artist</span>
-          )}
-        </div>
+          </div>
+      <div className="text-[13px] w-full flex flex-col justify-center pl-2">
+        <span className="font-semibold overflow-clip w-[9rem] h-[1.2rem] pr-2">{name
+                                    ? he.decode(name)
+                                    : "Empty"}</span>
+        <span className="flex gap-1">by<p className="font-semibold">{he.decode(artistNames)}</p></span>
       </div>
-    </button>
+        </div>
+  
+    </span>
   );
 };
 
