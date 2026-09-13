@@ -1,5 +1,17 @@
-import { useCallback, useMemo, useRef, useState } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+} from "react-router-dom";
+
 import AlbumDetail from "./pages/AlbumDetails";
 import Home from "./pages/Home";
 import MusicContext from "./context/MusicContext";
@@ -9,50 +21,100 @@ import PlaylistDetails from "./pages/PlaylistDetails";
 import Playlist from "./pages/Playlist";
 import Favourite from "./pages/Favourite";
 import Player from "./components/Player";
+
 import he from "he";
 import { fetchSyncedLyrics } from "./lyrics";
+
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import { IoIosCheckmarkCircle } from "react-icons/io";
 
+/* ---------------------------------------
+   URL HELPERS
+--------------------------------------- */
+
 const firstUrl = (value) => {
   if (!value) return "";
-  if (typeof value === "string") return value.trim();
+
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
   if (Array.isArray(value)) {
-    // Prefer the last/highest-quality URL, but accept any valid entry.
     for (let i = value.length - 1; i >= 0; i -= 1) {
       const url = firstUrl(value[i]);
-      if (url) return url;
+
+      if (url) {
+        return url;
+      }
     }
+
     return "";
   }
+
   if (typeof value === "object") {
     return firstUrl(
-      value.url ?? value.link ?? value.src ?? value.downloadUrl ??
-      value.audioUrl ?? value.audio ?? value.streamUrl
+      value.url ??
+        value.link ??
+        value.src ??
+        value.downloadUrl ??
+        value.audioUrl ??
+        value.audio ??
+        value.streamUrl ??
+        value.mediaUrl
     );
   }
+
   return "";
 };
 
 const imageUrl = (value) => {
   if (!value) return "/Unknown.png";
+
   const url = firstUrl(value);
+
   return url || "/Unknown.png";
 };
 
+/* ---------------------------------------
+   ARTIST NORMALIZER
+--------------------------------------- */
+
 const normaliseArtists = (artists) => {
-  if (Array.isArray(artists)) return { primary: artists };
-  if (artists && typeof artists === "object") return artists;
-  if (typeof artists === "string") {
-    return { primary: [{ name: artists }] };
+  if (Array.isArray(artists)) {
+    return {
+      primary: artists,
+    };
   }
-  return { primary: [] };
+
+  if (artists && typeof artists === "object") {
+    return artists;
+  }
+
+  if (typeof artists === "string") {
+    return {
+      primary: [
+        {
+          name: artists,
+        },
+      ],
+    };
+  }
+
+  return {
+    primary: [],
+  };
 };
+
+/* ---------------------------------------
+   SONG NORMALIZER
+--------------------------------------- */
 
 const normaliseSong = (input, legacy = {}) => {
   const source =
-    input && typeof input === "object" && !Array.isArray(input)
+    input &&
+    typeof input === "object" &&
+    !Array.isArray(input)
       ? input
       : {
           audio: input,
@@ -74,40 +136,97 @@ const normaliseSong = (input, legacy = {}) => {
 
   return {
     ...source,
-    id: source.id ?? source.songId ?? source.trackId ?? audioUrl,
-    name: source.name ?? source.title ?? source.songName ?? "Unknown Song",
+
+    id:
+      source.id ??
+      source.songId ??
+      source.trackId ??
+      audioUrl,
+
+    name:
+      source.name ??
+      source.title ??
+      source.songName ??
+      "Unknown Song",
+
     duration:
-      Number(source.duration ?? source.durationInSeconds ?? source.length) || 0,
-    image: imageUrl(source.image ?? source.cover ?? source.coverImage),
-    artists: normaliseArtists(source.artists ?? source.artist),
+      Number(
+        source.duration ??
+          source.durationInSeconds ??
+          source.length
+      ) || 0,
+
+    image: imageUrl(
+      source.image ??
+        source.cover ??
+        source.coverImage
+    ),
+
+    artists: normaliseArtists(
+      source.artists ??
+        source.artist
+    ),
+
     audioUrl,
   };
 };
+
+/* ---------------------------------------
+   APP
+--------------------------------------- */
 
 export default function App() {
   const [queue, setQueue] = useState([]);
   const [currentSong, setCurrentSong] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
+
   const [shuffle, setShuffle] = useState(false);
+
   const [repeatMode, setRepeatMode] = useState("none");
-  const [lyrics, setLyrics] = useState({ synced: false, lines: [], plain: "" });
-  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+
+  const [lyrics, setLyrics] = useState({
+    synced: false,
+    lines: [],
+    plain: "",
+  });
+
+  const [showSuccessPopup, setShowSuccessPopup] =
+    useState(false);
+
   const currentSongRef = useRef(null);
   const queueRef = useRef([]);
   const shuffleRef = useRef(false);
   const repeatRef = useRef("none");
+
+  /* ---------------------------------------
+     CURRENT SONG
+  --------------------------------------- */
 
   const setCurrent = useCallback((value) => {
     currentSongRef.current = value;
     setCurrentSong(value);
   }, []);
 
+  /* ---------------------------------------
+     SAVE PLAYED SONG
+  --------------------------------------- */
+
   const savePlayedSong = useCallback((item) => {
     try {
-      const saved = JSON.parse(localStorage.getItem("playedSongs") || "[]");
-      const list = Array.isArray(saved) ? saved : [];
+      const saved = JSON.parse(
+        localStorage.getItem("playedSongs") || "[]"
+      );
+
+      const list = Array.isArray(saved)
+        ? saved
+        : [];
+
       const id = item.id;
-      const without = list.filter((x) => String(x?.id) !== String(id));
+
+      const without = list.filter(
+        (x) => String(x?.id) !== String(id)
+      );
+
       without.unshift({
         id: item.id,
         name: item.name,
@@ -116,320 +235,787 @@ export default function App() {
         artists: item.artists,
         audio: item.audioUrl,
       });
-      localStorage.setItem("playedSongs", JSON.stringify(without.slice(0, 20)));
+
+      localStorage.setItem(
+        "playedSongs",
+        JSON.stringify(without.slice(0, 20))
+      );
     } catch (error) {
-      console.error("Could not save played song:", error);
+      console.error(
+        "Could not save played song:",
+        error
+      );
     }
   }, []);
 
-  const playNormalisedSong = useCallback(async (item) => {
-    const audioUrl = item?.audioUrl;
-    if (!audioUrl) {
-      console.error("No playable audio URL:", item);
-      return false;
-    }
+  /* ---------------------------------------
+     PLAY NORMALISED SONG
+  --------------------------------------- */
 
-    const previous = currentSongRef.current;
-    if (previous?.audio && previous.audio !== item.audio) {
-      previous.audio.pause();
-      previous.audio.removeAttribute("src");
-      previous.audio.load();
-    }
+  const playNormalisedSong = useCallback(
+    async (item) => {
+      const audioUrl = firstUrl(item?.audioUrl);
 
-    const audio = new Audio();
-    audio.preload = "metadata";
-    audio.src = audioUrl;
+      if (!audioUrl) {
+        console.error(
+          "No playable audio URL:",
+          item
+        );
+        return false;
+      }
 
-    try {
-      const savedVolume = Number(localStorage.getItem("volume"));
-      audio.volume = Number.isFinite(savedVolume)
-        ? Math.min(1, Math.max(0, savedVolume / 100))
-        : 1;
-    } catch {
-      audio.volume = 1;
-    }
+      const previous =
+        currentSongRef.current;
 
-    const current = {
-      ...item,
-      audio,
-      url: audioUrl,
-      coverImage: item.image,
-    };
+      if (
+        previous?.audio &&
+        previous.audio !== item.audio
+      ) {
+        try {
+          previous.audio.pause();
+          previous.audio.removeAttribute("src");
+          previous.audio.load();
+        } catch (error) {
+          console.warn(
+            "Could not clean previous audio:",
+            error
+          );
+        }
+      }
 
-    setCurrent(current);
-    setIsPlaying(false);
-    savePlayedSong(item);
+      const audio = new Audio();
 
-    try {
-      await audio.play();
-      setIsPlaying(true);
-      return true;
-    } catch (error) {
-      // Mobile browsers can reject autoplay outside a user gesture.
-      console.error("Audio play failed:", error);
-      setIsPlaying(false);
-      return false;
-    }
-  }, [savePlayedSong, setCurrent]);
+      audio.preload = "metadata";
+      audio.src = audioUrl;
 
-  const playMusic = useCallback(async (
-    songOrUrl,
-    name,
-    duration,
-    image,
-    id,
-    artists,
-    songList
-  ) => {
-    // New API: playMusic(songObject, queue)
-    // Legacy API: playMusic(url, name, duration, image, id, artists, queue)
-    let rawSong;
-    let list = [];
+      try {
+        const savedVolume = Number(
+          localStorage.getItem("volume")
+        );
 
-    if (songOrUrl && typeof songOrUrl === "object" && !Array.isArray(songOrUrl)) {
-      rawSong = songOrUrl;
-      list = Array.isArray(name) ? name : Array.isArray(songList) ? songList : [];
-    } else {
-      rawSong = {
-        audio: songOrUrl,
-        name,
-        duration,
-        image,
-        id,
-        artists,
+        audio.volume = Number.isFinite(savedVolume)
+          ? Math.min(
+              1,
+              Math.max(0, savedVolume / 100)
+            )
+          : 1;
+      } catch {
+        audio.volume = 1;
+      }
+
+      const current = {
+        ...item,
+        audio,
+        url: audioUrl,
+        audioUrl,
+        coverImage: item.image,
       };
-      list = Array.isArray(songList)
-        ? songList
-        : Array.isArray(artists)
-          ? artists
-          : [];
-    }
 
-    const normalised = normaliseSong(rawSong, {
+      setCurrent(current);
+      setIsPlaying(false);
+
+      savePlayedSong(item);
+
+      try {
+        await audio.play();
+
+        setIsPlaying(true);
+
+        return true;
+      } catch (error) {
+        console.error(
+          "Audio play failed:",
+          error
+        );
+
+        setIsPlaying(false);
+
+        return false;
+      }
+    },
+    [savePlayedSong, setCurrent]
+  );
+
+  /* ---------------------------------------
+     PLAY MUSIC
+  --------------------------------------- */
+
+  const playMusic = useCallback(
+    async (
+      songOrUrl,
       name,
       duration,
       image,
       id,
       artists,
-    });
+      songList
+    ) => {
+      let rawSong;
+      let list = [];
 
-    if (!normalised.audioUrl) {
-      console.error("playMusic: invalid audio URL", songOrUrl);
-      return;
-    }
+      /*
+        New API:
+        playMusic(songObject, queue)
 
-    if (list.length) {
-      const normalisedQueue = list
-        .map((item) => normaliseSong(item))
-        .filter((item) => item.audioUrl);
-      if (normalisedQueue.length) {
-        queueRef.current = normalisedQueue;
-        setQueue(normalisedQueue);
-      }
-    } else if (!queueRef.current.length) {
-      queueRef.current = [normalised];
-      setQueue([normalised]);
-    } else {
-      // Keep the existing playlist queue when a player control starts another track.
-      const exists = queueRef.current.some(
-        (item) => String(item.id) === String(normalised.id)
-      );
-      if (!exists) {
-        queueRef.current = [...queueRef.current, normalised];
-        setQueue(queueRef.current);
-      }
-    }
+        Legacy API:
+        playMusic(
+          url,
+          name,
+          duration,
+          image,
+          id,
+          artists,
+          queue
+        )
+      */
 
-    const existing = currentSongRef.current;
-    if (existing && String(existing.id) === String(normalised.id)) {
-      if (existing.audio.paused) {
-        try {
-          await existing.audio.play();
-          setIsPlaying(true);
-        } catch (error) {
-          console.error("Resume failed:", error);
-          setIsPlaying(false);
-        }
+      if (
+        songOrUrl &&
+        typeof songOrUrl === "object" &&
+        !Array.isArray(songOrUrl)
+      ) {
+        rawSong = songOrUrl;
+
+        list = Array.isArray(name)
+          ? name
+          : Array.isArray(songList)
+          ? songList
+          : [];
       } else {
-        existing.audio.pause();
-        setIsPlaying(false);
+        rawSong = {
+          audio: songOrUrl,
+          name,
+          duration,
+          image,
+          id,
+          artists,
+        };
+
+        list = Array.isArray(songList)
+          ? songList
+          : [];
       }
-      return;
-    }
 
-    await playNormalisedSong(normalised);
-  }, [playNormalisedSong]);
+      const normalised = normaliseSong(
+        rawSong,
+        {
+          name,
+          duration,
+          image,
+          id,
+          artists,
+        }
+      );
 
-  const nextSong = useCallback(async () => {
-    const current = currentSongRef.current;
-    const list = queueRef.current;
-    if (!current || !list.length) return;
+      if (!normalised.audioUrl) {
+        console.error(
+          "playMusic: invalid audio URL",
+          songOrUrl
+        );
 
-    let index = list.findIndex((item) => String(item.id) === String(current.id));
-    if (index < 0) index = 0;
+        return;
+      }
 
-    let nextIndex;
-    if (shuffleRef.current && list.length > 1) {
-      do {
-        nextIndex = Math.floor(Math.random() * list.length);
-      } while (nextIndex === index);
-    } else {
-      nextIndex = index + 1;
-      if (nextIndex >= list.length) {
-        if (repeatRef.current === "all") {
-          nextIndex = 0;
-        } else {
-          current.audio.pause();
-          setIsPlaying(false);
-          return;
+      /* Update queue */
+
+      if (list.length) {
+        const normalisedQueue = list
+          .map((item) =>
+            normaliseSong(item)
+          )
+          .filter(
+            (item) => item.audioUrl
+          );
+
+        if (normalisedQueue.length) {
+          queueRef.current =
+            normalisedQueue;
+
+          setQueue(normalisedQueue);
+        }
+      } else if (
+        !queueRef.current.length
+      ) {
+        queueRef.current = [
+          normalised,
+        ];
+
+        setQueue([
+          normalised,
+        ]);
+      } else {
+        const exists =
+          queueRef.current.some(
+            (item) =>
+              String(item.id) ===
+              String(normalised.id)
+          );
+
+        if (!exists) {
+          queueRef.current = [
+            ...queueRef.current,
+            normalised,
+          ];
+
+          setQueue(
+            queueRef.current
+          );
         }
       }
-    }
 
-    await playNormalisedSong(list[nextIndex]);
-  }, [playNormalisedSong]);
+      /* Same song = toggle play/pause */
 
-  const prevSong = useCallback(async () => {
-    const current = currentSongRef.current;
-    const list = queueRef.current;
-    if (!current || !list.length) return;
+      const existing =
+        currentSongRef.current;
 
-    // Standard player behaviour: restart current song if it has played > 3 seconds.
-    if (current.audio && current.audio.currentTime > 3) {
-      current.audio.currentTime = 0;
-      return;
-    }
+      if (
+        existing &&
+        String(existing.id) ===
+          String(normalised.id)
+      ) {
+        if (existing.audio.paused) {
+          try {
+            await existing.audio.play();
 
-    const index = list.findIndex((item) => String(item.id) === String(current.id));
-    const safeIndex = index < 0 ? 0 : index;
-    const previousIndex = (safeIndex - 1 + list.length) % list.length;
-    await playNormalisedSong(list[previousIndex]);
-  }, [playNormalisedSong]);
+            setIsPlaying(true);
+          } catch (error) {
+            console.error(
+              "Resume failed:",
+              error
+            );
 
-  const toggleShuffle = useCallback(() => {
-    setShuffle((value) => {
-      const next = !value;
-      shuffleRef.current = next;
-      return next;
-    });
-  }, []);
+            setIsPlaying(false);
+          }
+        } else {
+          existing.audio.pause();
 
-  const toggleRepeatMode = useCallback(() => {
-    setRepeatMode((value) => {
-      const next = value === "none" ? "one" : value === "one" ? "all" : "none";
-      repeatRef.current = next;
-      const audio = currentSongRef.current?.audio;
-      if (audio) audio.loop = next === "one";
-      return next;
-    });
-  }, []);
+          setIsPlaying(false);
+        }
 
-  const downloadSong = useCallback(async () => {
-    const audio = currentSongRef.current?.audio;
-    const url = audio?.currentSrc || audio?.src || currentSongRef.current?.audioUrl;
-    if (!url) {
-      alert("Download URL is not available.");
-      return;
-    }
+        return;
+      }
 
-    const filename = `${he.decode(String(currentSongRef.current?.name || "song"))}.mp3`;
-    try {
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const blob = await response.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = filename.replace(/[\\/:*?"<>|]/g, "_");
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-    } catch (error) {
-      console.warn("Blob download failed, using direct download:", error);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename.replace(/[\\/:*?"<>|]/g, "_");
-      link.target = "_blank";
-      link.rel = "noopener";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    }
+      await playNormalisedSong(
+        normalised
+      );
+    },
+    [playNormalisedSong]
+  );
 
-    setShowSuccessPopup(true);
-    window.setTimeout(() => setShowSuccessPopup(false), 2500);
-  }, []);
+  /* ---------------------------------------
+     NEXT SONG
+  --------------------------------------- */
+
+  const nextSong = useCallback(
+    async () => {
+      const current =
+        currentSongRef.current;
+
+      const list =
+        queueRef.current;
+
+      if (
+        !current ||
+        !list.length
+      ) {
+        return;
+      }
+
+      let index = list.findIndex(
+        (item) =>
+          String(item.id) ===
+          String(current.id)
+      );
+
+      if (index < 0) {
+        index = 0;
+      }
+
+      let nextIndex;
+
+      if (
+        shuffleRef.current &&
+        list.length > 1
+      ) {
+        do {
+          nextIndex = Math.floor(
+            Math.random() *
+              list.length
+          );
+        } while (
+          nextIndex === index
+        );
+      } else {
+        nextIndex = index + 1;
+
+        if (
+          nextIndex >=
+          list.length
+        ) {
+          if (
+            repeatRef.current ===
+            "all"
+          ) {
+            nextIndex = 0;
+          } else {
+            current.audio.pause();
+
+            setIsPlaying(false);
+
+            return;
+          }
+        }
+      }
+
+      await playNormalisedSong(
+        list[nextIndex]
+      );
+    },
+    [playNormalisedSong]
+  );
+
+  /* ---------------------------------------
+     PREVIOUS SONG
+  --------------------------------------- */
+
+  const prevSong = useCallback(
+    async () => {
+      const current =
+        currentSongRef.current;
+
+      const list =
+        queueRef.current;
+
+      if (
+        !current ||
+        !list.length
+      ) {
+        return;
+      }
+
+      if (
+        current.audio &&
+        current.audio.currentTime > 3
+      ) {
+        current.audio.currentTime = 0;
+
+        return;
+      }
+
+      const index =
+        list.findIndex(
+          (item) =>
+            String(item.id) ===
+            String(current.id)
+        );
+
+      const safeIndex =
+        index < 0
+          ? 0
+          : index;
+
+      const previousIndex =
+        (safeIndex -
+          1 +
+          list.length) %
+        list.length;
+
+      await playNormalisedSong(
+        list[previousIndex]
+      );
+    },
+    [playNormalisedSong]
+  );
+
+  /* ---------------------------------------
+     SHUFFLE
+  --------------------------------------- */
+
+  const toggleShuffle =
+    useCallback(() => {
+      setShuffle((value) => {
+        const next = !value;
+
+        shuffleRef.current =
+          next;
+
+        return next;
+      });
+    }, []);
+
+  /* ---------------------------------------
+     REPEAT
+  --------------------------------------- */
+
+  const toggleRepeatMode =
+    useCallback(() => {
+      setRepeatMode((value) => {
+        const next =
+          value === "none"
+            ? "one"
+            : value === "one"
+            ? "all"
+            : "none";
+
+        repeatRef.current =
+          next;
+
+        const audio =
+          currentSongRef
+            .current?.audio;
+
+        if (audio) {
+          audio.loop =
+            next === "one";
+        }
+
+        return next;
+      });
+    }, []);
+
+  /* ---------------------------------------
+     DOWNLOAD
+  --------------------------------------- */
+
+  const downloadSong =
+    useCallback(async () => {
+      const audio =
+        currentSongRef.current
+          ?.audio;
+
+      const url =
+        audio?.currentSrc ||
+        audio?.src ||
+        currentSongRef.current
+          ?.audioUrl;
+
+      if (!url) {
+        alert(
+          "Download URL is not available."
+        );
+
+        return;
+      }
+
+      const filename =
+        `${he.decode(
+          String(
+            currentSongRef.current
+              ?.name || "song"
+          )
+        )}.mp3`;
+
+      const safeFilename =
+        filename.replace(
+          /[\\/:*?"<>|]/g,
+          "_"
+        );
+
+      try {
+        const response =
+          await fetch(url);
+
+        if (!response.ok) {
+          throw new Error(
+            `HTTP ${response.status}`
+          );
+        }
+
+        const blob =
+          await response.blob();
+
+        const objectUrl =
+          URL.createObjectURL(
+            blob
+          );
+
+        const link =
+          document.createElement(
+            "a"
+          );
+
+        link.href =
+          objectUrl;
+
+        link.download =
+          safeFilename;
+
+        document.body.appendChild(
+          link
+        );
+
+        link.click();
+
+        link.remove();
+
+        setTimeout(() => {
+          URL.revokeObjectURL(
+            objectUrl
+          );
+        }, 1000);
+      } catch (error) {
+        console.warn(
+          "Blob download failed. Trying direct download:",
+          error
+        );
+
+        const link =
+          document.createElement(
+            "a"
+          );
+
+        link.href = url;
+        link.download =
+          safeFilename;
+        link.target = "_blank";
+        link.rel = "noopener";
+
+        document.body.appendChild(
+          link
+        );
+
+        link.click();
+
+        link.remove();
+      }
+
+      setShowSuccessPopup(
+        true
+      );
+
+      window.setTimeout(() => {
+        setShowSuccessPopup(
+          false
+        );
+      }, 2500);
+    }, []);
+
+  /* ---------------------------------------
+     LYRICS
+  --------------------------------------- */
 
   useEffect(() => {
     let cancelled = false;
-    const loadLyrics = async () => {
-      if (!currentSong) {
-        setLyrics({ synced: false, lines: [], plain: "" });
-        return;
-      }
-      const primary = currentSong.artists?.primary;
-      const artistName = Array.isArray(primary)
-        ? primary.map((a) => a?.name).filter(Boolean).join(", ")
-        : (currentSong.artist || "");
-      setLyrics({ synced: false, lines: [], plain: "Loading lyrics..." });
-      try {
-        const result = await fetchSyncedLyrics(currentSong.name, artistName, currentSong.duration);
-        if (!cancelled) setLyrics(result || { synced: false, lines: [], plain: "No lyrics available." });
-      } catch (error) {
-        console.error("Lyrics load failed:", error);
-        if (!cancelled) setLyrics({ synced: false, lines: [], plain: "Could not load lyrics." });
-      }
-    };
-    loadLyrics();
-    return () => { cancelled = true; };
-  }, [currentSong?.id]);
 
-  const value = useMemo(() => ({
-    songs: queue,
-    song: queue,
-    setSongs: (items) => {
-      const normalised = Array.isArray(items)
-        ? items.map((item) => normaliseSong(item)).filter((item) => item.audioUrl)
-        : [];
-      queueRef.current = normalised;
-      setQueue(normalised);
-    },
-    setSong: () => {},
-    queue,
-    currentSong,
-    playMusic,
-    nextSong,
-    prevSong,
-    isPlaying,
-    setIsPlaying,
-    shuffle,
-    toggleShuffle,
-    repeatMode,
-    toggleRepeatMode,
-    downloadSong,
-    lyrics,
-    coverImage: currentSong?.coverImage || currentSong?.image || "/Unknown.png",
-  }), [
-    queue, currentSong, playMusic, nextSong, prevSong, isPlaying, lyrics,
-    shuffle, toggleShuffle, repeatMode, toggleRepeatMode, downloadSong
+    const loadLyrics =
+      async () => {
+        if (!currentSong) {
+          setLyrics({
+            synced: false,
+            lines: [],
+            plain: "",
+          });
+
+          return;
+        }
+
+        const primary =
+          currentSong.artists
+            ?.primary;
+
+        const artistName =
+          Array.isArray(primary)
+            ? primary
+                .map(
+                  (a) =>
+                    a?.name
+                )
+                .filter(Boolean)
+                .join(", ")
+            : currentSong.artist ||
+              "";
+
+        setLyrics({
+          synced: false,
+          lines: [],
+          plain:
+            "Loading lyrics...",
+        });
+
+        try {
+          const result =
+            await fetchSyncedLyrics(
+              currentSong.name,
+              artistName,
+              currentSong.duration
+            );
+
+          if (!cancelled) {
+            setLyrics(
+              result || {
+                synced: false,
+                lines: [],
+                plain:
+                  "No lyrics available.",
+              }
+            );
+          }
+        } catch (error) {
+          console.error(
+            "Lyrics load failed:",
+            error
+          );
+
+          if (!cancelled) {
+            setLyrics({
+              synced: false,
+              lines: [],
+              plain:
+                "Could not load lyrics.",
+            });
+          }
+        }
+      };
+
+    loadLyrics();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentSong?.id,
+    currentSong?.name,
+    currentSong?.duration,
   ]);
+
+  /* ---------------------------------------
+     MUSIC CONTEXT
+  --------------------------------------- */
+
+  const value = useMemo(
+    () => ({
+      songs: queue,
+      song: queue,
+
+      setSongs: (items) => {
+        const normalised =
+          Array.isArray(items)
+            ? items
+                .map((item) =>
+                  normaliseSong(item)
+                )
+                .filter(
+                  (item) =>
+                    item.audioUrl
+                )
+            : [];
+
+        queueRef.current =
+          normalised;
+
+        setQueue(normalised);
+      },
+
+      setSong: () => {},
+
+      queue,
+
+      currentSong,
+
+      playMusic,
+
+      nextSong,
+
+      prevSong,
+
+      isPlaying,
+
+      setIsPlaying,
+
+      shuffle,
+
+      toggleShuffle,
+
+      repeatMode,
+
+      toggleRepeatMode,
+
+      downloadSong,
+
+      lyrics,
+
+      coverImage:
+        currentSong?.coverImage ||
+        currentSong?.image ||
+        "/Unknown.png",
+    }),
+    [
+      queue,
+      currentSong,
+      playMusic,
+      nextSong,
+      prevSong,
+      isPlaying,
+      lyrics,
+      shuffle,
+      toggleShuffle,
+      repeatMode,
+      toggleRepeatMode,
+      downloadSong,
+    ]
+  );
+
+  /* ---------------------------------------
+     RENDER
+  --------------------------------------- */
 
   return (
     <>
       <Analytics />
+
       <SpeedInsights />
-      <MusicContext.Provider value={value}>
+
+      <MusicContext.Provider
+        value={value}
+      >
         <Router>
           <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/artists/:id" element={<ArtistsDetails />} />
-            <Route path="/albums/:id" element={<AlbumDetail />} />
-            <Route path="/search/:query" element={<SearchResult />} />
-            <Route path="/playlists/:id" element={<PlaylistDetails />} />
-            <Route path="/Playlist" element={<Playlist />} />
-            <Route path="/Favourite" element={<Favourite />} />
+            <Route
+              path="/"
+              element={<Home />}
+            />
+
+            <Route
+              path="/artists/:id"
+              element={
+                <ArtistsDetails />
+              }
+            />
+
+            <Route
+              path="/albums/:id"
+              element={
+                <AlbumDetail />
+              }
+            />
+
+            <Route
+              path="/search/:query"
+              element={
+                <SearchResult />
+              }
+            />
+
+            <Route
+              path="/playlists/:id"
+              element={
+                <PlaylistDetails />
+              }
+            />
+
+            <Route
+              path="/Playlist"
+              element={<Playlist />}
+            />
+
+            <Route
+              path="/Favourite"
+              element={
+                <Favourite />
+              }
+            />
           </Routes>
+
           <Player />
         </Router>
       </MusicContext.Provider>
@@ -438,7 +1024,10 @@ export default function App() {
         <div className="fixed top-6 left-0 z-[100] flex w-full justify-center">
           <div className="flex items-center gap-3 rounded bg-[#2c2c2c] p-3 text-white shadow-xl">
             <IoIosCheckmarkCircle className="text-xl" />
-            <span className="font-semibold">Downloaded</span>
+
+            <span className="font-semibold">
+              Downloaded
+            </span>
           </div>
         </div>
       )}
