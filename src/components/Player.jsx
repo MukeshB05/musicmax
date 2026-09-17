@@ -13,7 +13,9 @@ import {
 
 import { IoShareSocial } from "react-icons/io5";
 
-import { PiShuffleBold } from "react-icons/pi";
+import {
+  PiShuffleBold,
+} from "react-icons/pi";
 
 import {
   LuRepeat,
@@ -83,7 +85,7 @@ const safeDecode = (value) => {
 };
 
 /* =========================================================
-   IMAGE RESOLVER
+   RESOLVE IMAGE
 ========================================================= */
 
 const resolveImage = (value) => {
@@ -198,6 +200,7 @@ const getSongId = (song) => {
 
 /* =========================================================
    LYRIC TIME
+   Supports seconds + milliseconds
 ========================================================= */
 
 const getLyricTime = (line) => {
@@ -240,6 +243,65 @@ const Player = () => {
   ) || {};
 
   /* =======================================================
+     THEME
+  ======================================================= */
+
+  const [themeVersion, setThemeVersion] =
+    useState(0);
+
+  const theme =
+    typeof document !== "undefined"
+      ? document.documentElement.getAttribute(
+          "data-theme"
+        )
+      : "light";
+
+  const isDark =
+    theme === "dark" ||
+    theme === "black" ||
+    theme === "night";
+
+  /*
+    Re-render if data-theme changes
+  */
+
+  useEffect(() => {
+    if (
+      typeof document ===
+      "undefined"
+    ) {
+      return undefined;
+    }
+
+    const root =
+      document.documentElement;
+
+    const observer =
+      new MutationObserver(() => {
+        setThemeVersion(
+          (value) => value + 1
+        );
+      });
+
+    observer.observe(root, {
+      attributes: true,
+      attributeFilter: [
+        "data-theme",
+      ],
+    });
+
+    return () =>
+      observer.disconnect();
+  }, []);
+
+  /*
+    Prevent unused-variable optimisation
+    from removing theme tracking.
+  */
+
+  void themeVersion;
+
+  /* =======================================================
      STATE
   ======================================================= */
 
@@ -261,52 +323,76 @@ const Player = () => {
   const [suggestions, setSuggestions] =
     useState([]);
 
-  const [isMuted, setIsMuted] =
-    useState(false);
+  /* =======================================================
+     VOLUME
+
+     IMPORTANT:
+     App.jsx uses localStorage("volume")
+     as 0 - 100.
+
+     Therefore Player also uses:
+     0   = muted
+     100 = maximum
+  ======================================================= */
 
   const [volume, setVolume] =
     useState(() => {
       try {
-        const saved =
-          Number(
-            localStorage.getItem(
-              "musicVolume"
-            )
-          );
+        const saved = Number(
+          localStorage.getItem(
+            "volume"
+          )
+        );
 
         if (
           Number.isFinite(saved) &&
           saved >= 0 &&
-          saved <= 1
+          saved <= 100
         ) {
           return saved;
         }
       } catch {}
 
-      return 1;
+      return 100;
     });
 
   const [previousVolume, setPreviousVolume] =
     useState(() => {
       try {
-        const saved =
-          Number(
-            localStorage.getItem(
-              "musicPreviousVolume"
-            )
-          );
+        const saved = Number(
+          localStorage.getItem(
+            "previousVolume"
+          )
+        );
 
         if (
           Number.isFinite(saved) &&
           saved > 0 &&
-          saved <= 1
+          saved <= 100
         ) {
           return saved;
         }
       } catch {}
 
-      return 1;
+      return 100;
     });
+
+  const [isMuted, setIsMuted] =
+    useState(() => {
+      try {
+        return (
+          localStorage.getItem(
+            "isMuted"
+          ) === "true"
+        );
+      } catch {
+        return false;
+      }
+    });
+
+  /* =======================================================
+     LIKED SONGS
+  ======================================================= */
 
   const [likedSongs, setLikedSongs] =
     useState(() => {
@@ -351,7 +437,9 @@ const Player = () => {
     getSongId(currentSong);
 
   const duration =
-    Number(currentSong?.duration) > 0
+    Number(
+      currentSong?.duration
+    ) > 0
       ? Number(
           currentSong.duration
         )
@@ -402,12 +490,13 @@ const Player = () => {
   ]);
 
   /* =======================================================
-     ARTIST NAME
+     ARTIST
   ======================================================= */
 
   const artistNames = useMemo(() => {
     const primary =
-      currentSong?.artists?.primary;
+      currentSong?.artists
+        ?.primary;
 
     if (
       Array.isArray(primary) &&
@@ -434,7 +523,7 @@ const Player = () => {
   ]);
 
   /* =======================================================
-     LIKE
+     LIKE STATUS
   ======================================================= */
 
   const isLiked =
@@ -465,7 +554,10 @@ const Player = () => {
       let activeIndex = -1;
 
       lyrics.lines.forEach(
-        (line, index) => {
+        (
+          line,
+          index
+        ) => {
           const lineTime =
             getLyricTime(line);
 
@@ -473,7 +565,8 @@ const Player = () => {
             lineTime !== null &&
             lineTime <= currentTime
           ) {
-            activeIndex = index;
+            activeIndex =
+              index;
           }
         }
       );
@@ -485,7 +578,7 @@ const Player = () => {
     ]);
 
   /* =======================================================
-     RESET SONG
+     RESET WHEN SONG CHANGES
   ======================================================= */
 
   useEffect(() => {
@@ -506,35 +599,62 @@ const Player = () => {
   }, [songId]);
 
   /* =======================================================
-     APPLY VOLUME TO AUDIO
+     APPLY VOLUME
   ======================================================= */
 
   useEffect(() => {
-    if (!audio) {
+    if (
+      !audio ||
+      typeof audio !== "object"
+    ) {
       return;
     }
+
+    const safeVolume =
+      Math.min(
+        100,
+        Math.max(
+          0,
+          Number(volume) || 0
+        )
+      );
 
     try {
       audio.volume =
         isMuted
           ? 0
-          : volume;
+          : safeVolume / 100;
 
       audio.muted =
-        isMuted;
-    } catch {}
+        Boolean(isMuted);
+    } catch (error) {
+      console.warn(
+        "Volume apply failed:",
+        error
+      );
+    }
 
     try {
       localStorage.setItem(
-        "musicVolume",
-        String(volume)
+        "volume",
+        String(safeVolume)
       );
 
       localStorage.setItem(
-        "musicPreviousVolume",
+        "previousVolume",
         String(
-          previousVolume
+          Math.max(
+            1,
+            Number(
+              previousVolume
+            ) || 100
+          )
         )
+      );
+
+      localStorage.setItem(
+        "isMuted",
+        String(isMuted)
       );
     } catch {}
   }, [
@@ -607,6 +727,21 @@ const Player = () => {
       }
 
       updateTime();
+
+      /*
+        Reapply volume whenever a
+        new audio element loads.
+      */
+
+      try {
+        audio.volume =
+          isMuted
+            ? 0
+            : volume / 100;
+
+        audio.muted =
+          isMuted;
+      } catch {}
     };
 
     const ended = () => {
@@ -664,10 +799,12 @@ const Player = () => {
     audio,
     nextSong,
     repeatMode,
+    volume,
+    isMuted,
   ]);
 
   /* =======================================================
-     REPEAT ONE
+     REPEAT
   ======================================================= */
 
   useEffect(() => {
@@ -685,7 +822,7 @@ const Player = () => {
   ]);
 
   /* =======================================================
-     LOAD SONG DETAILS
+     FETCH DETAILS
   ======================================================= */
 
   useEffect(() => {
@@ -885,10 +1022,6 @@ const Player = () => {
 
   /* =======================================================
      LYRIC AUTO SCROLL
-
-     IMPORTANT:
-     Only lyricContainerRef is scrolled.
-     The main page/window is never scrolled.
   ======================================================= */
 
   useEffect(() => {
@@ -1016,7 +1149,9 @@ const Player = () => {
         event.target.value
       );
 
-    if (!Number.isFinite(value)) {
+    if (
+      !Number.isFinite(value)
+    ) {
       return;
     }
 
@@ -1041,71 +1176,82 @@ const Player = () => {
   };
 
   /* =======================================================
-     VOLUME
+     VOLUME CHANGE
   ======================================================= */
 
-  const handleVolumeChange = (
-    event
-  ) => {
-    const value =
-      Number(
-        event.target.value
-      );
+  const handleVolumeChange =
+    (event) => {
+      const value =
+        Number(
+          event.target.value
+        );
 
-    if (!Number.isFinite(value)) {
-      return;
-    }
+      if (
+        !Number.isFinite(value)
+      ) {
+        return;
+      }
 
-    const newVolume =
-      Math.min(
-        1,
-        Math.max(
-          0,
-          value
-        )
-      );
+      const newVolume =
+        Math.min(
+          100,
+          Math.max(
+            0,
+            value
+          )
+        );
 
-    setVolume(
-      newVolume
-    );
-
-    if (
-      newVolume > 0
-    ) {
-      setPreviousVolume(
+      setVolume(
         newVolume
       );
 
-      setIsMuted(
-        false
-      );
-    } else {
-      setIsMuted(
-        true
-      );
-    }
+      if (
+        newVolume > 0
+      ) {
+        setPreviousVolume(
+          newVolume
+        );
 
-    if (audio) {
-      try {
-        audio.volume =
-          newVolume;
+        setIsMuted(
+          false
+        );
 
-        audio.muted =
-          newVolume === 0;
-      } catch {}
-    }
-  };
+        if (audio) {
+          try {
+            audio.volume =
+              newVolume / 100;
+
+            audio.muted =
+              false;
+          } catch {}
+        }
+      } else {
+        setIsMuted(
+          true
+        );
+
+        if (audio) {
+          try {
+            audio.volume = 0;
+            audio.muted = true;
+          } catch {}
+        }
+      }
+    };
 
   /* =======================================================
-     MUTE
+     MUTE / UNMUTE
   ======================================================= */
 
   const toggleMute = () => {
-    if (isMuted || volume === 0) {
+    if (
+      isMuted ||
+      volume === 0
+    ) {
       const restore =
         previousVolume > 0
           ? previousVolume
-          : 1;
+          : 100;
 
       setVolume(
         restore
@@ -1118,7 +1264,7 @@ const Player = () => {
       if (audio) {
         try {
           audio.volume =
-            restore;
+            restore / 100;
 
           audio.muted =
             false;
@@ -1152,7 +1298,7 @@ const Player = () => {
     isMuted ||
     volume === 0
       ? FaVolumeXmark
-      : volume < 0.5
+      : volume < 50
       ? FaVolumeLow
       : FaVolumeHigh;
 
@@ -1167,7 +1313,8 @@ const Player = () => {
       Math.max(
         0,
         Math.floor(
-          Number(value) || 0
+          Number(value) ||
+            0
         )
       );
 
@@ -1273,9 +1420,10 @@ const Player = () => {
       detail?.album?.id ||
       currentSong?.album?.id;
 
-    const url = albumId
-      ? `${window.location.origin}/albums/${albumId}`
-      : window.location.href;
+    const url =
+      albumId
+        ? `${window.location.origin}/albums/${albumId}`
+        : window.location.href;
 
     try {
       if (
@@ -1385,11 +1533,14 @@ const Player = () => {
 
         link.remove();
 
-        setTimeout(() => {
-          URL.revokeObjectURL(
-            objectUrl
-          );
-        }, 1000);
+        setTimeout(
+          () => {
+            URL.revokeObjectURL(
+              objectUrl
+            );
+          },
+          1000
+        );
       } catch (error) {
         console.warn(
           "Direct download failed:",
@@ -1448,7 +1599,31 @@ const Player = () => {
     );
 
   /* =======================================================
-     PLAYER
+     THEME COLORS
+  ======================================================= */
+
+  const panelClass =
+    isDark
+      ? "bg-black/75 border-white/10 text-white"
+      : "bg-white/85 border-black/10 text-gray-900";
+
+  const softPanelClass =
+    isDark
+      ? "bg-white/5 border-white/10"
+      : "bg-black/5 border-black/10";
+
+  const mutedTextClass =
+    isDark
+      ? "text-white/55"
+      : "text-black/55";
+
+  const iconMutedClass =
+    isDark
+      ? "text-white/70 hover:text-white"
+      : "text-black/65 hover:text-black";
+
+  /* =======================================================
+     UI
   ======================================================= */
 
   return (
@@ -1462,10 +1637,6 @@ const Player = () => {
         lg:bottom-0
       "
     >
-      {/* ===================================================
-          MAIN PLAYER
-      =================================================== */}
-
       <div
         className={`
           relative
@@ -1473,9 +1644,9 @@ const Player = () => {
           overflow-hidden
           rounded-t-3xl
           border-t
-          border-white/10
-          bg-black
-          shadow-[0_-20px_80px_rgba(0,0,0,0.65)]
+          shadow-[0_-20px_80px_rgba(0,0,0,0.35)]
+          backdrop-blur-3xl
+          ${panelClass}
           ${
             isMaximized
               ? "h-[92vh]"
@@ -1484,7 +1655,7 @@ const Player = () => {
         `}
       >
         {/* =================================================
-            ARTWORK BACKGROUND
+            BACKGROUND ART
         ================================================= */}
 
         <div
@@ -1509,41 +1680,41 @@ const Player = () => {
               w-full
               scale-125
               object-cover
-              opacity-40
+              opacity-35
               blur-3xl
             "
             onError={(
               event
             ) => {
-              if (
-                !event.currentTarget.src.includes(
-                  "Unknown.png"
-                )
-              ) {
-                event.currentTarget.src =
-                  FALLBACK_IMAGE;
-              }
+              event.currentTarget.src =
+                FALLBACK_IMAGE;
             }}
           />
 
           <div
-            className="
+            className={`
               absolute
               inset-0
-              bg-black/65
               backdrop-blur-2xl
-            "
+              ${
+                isDark
+                  ? "bg-black/70"
+                  : "bg-white/70"
+              }
+            `}
           />
 
           <div
-            className="
+            className={`
               absolute
               inset-0
               bg-gradient-to-b
-              from-black/10
-              via-black/60
-              to-black/95
-            "
+              ${
+                isDark
+                  ? "from-black/20 via-black/60 to-black/95"
+                  : "from-white/30 via-white/65 to-white/95"
+              }
+            `}
           />
         </div>
 
@@ -1582,9 +1753,7 @@ const Player = () => {
                   artwork ||
                   FALLBACK_IMAGE
                 }
-                alt={
-                  songName
-                }
+                alt={songName}
                 className="
                   h-12
                   w-12
@@ -1603,7 +1772,7 @@ const Player = () => {
                 }}
               />
 
-              {/* SONG INFO */}
+              {/* INFO */}
 
               <div
                 className="
@@ -1618,21 +1787,17 @@ const Player = () => {
                     font-semibold
                   "
                 >
-                  {
-                    songName
-                  }
+                  {songName}
                 </div>
 
                 <div
-                  className="
+                  className={`
                     truncate
                     text-xs
-                    text-white/55
-                  "
+                    ${mutedTextClass}
+                  `}
                 >
-                  {
-                    artistNames
-                  }
+                  {artistNames}
                 </div>
 
                 <div
@@ -1643,7 +1808,7 @@ const Player = () => {
                     gap-2
                   "
                 >
-                  <span className="text-[10px] text-white/60">
+                  <span className="text-[10px] opacity-60">
                     {formatTime(
                       currentTime
                     )}
@@ -1667,7 +1832,7 @@ const Player = () => {
                     "
                   />
 
-                  <span className="text-[10px] text-white/60">
+                  <span className="text-[10px] opacity-60">
                     {formatTime(
                       duration
                     )}
@@ -1683,14 +1848,15 @@ const Player = () => {
                   prevSong?.()
                 }
                 title="Previous"
-                className="
+                className={`
                   hidden
                   rounded-full
                   p-2
                   transition
                   hover:bg-white/10
                   sm:block
-                "
+                  ${iconMutedClass}
+                `}
               >
                 <IoMdSkipBackward className="text-2xl" />
               </button>
@@ -1713,7 +1879,7 @@ const Player = () => {
                   bg-white
                   p-2.5
                   text-black
-                  shadow-lg
+                  shadow-xl
                   transition
                   hover:scale-105
                   active:scale-95
@@ -1734,14 +1900,15 @@ const Player = () => {
                   nextSong?.()
                 }
                 title="Next"
-                className="
+                className={`
                   hidden
                   rounded-full
                   p-2
                   transition
                   hover:bg-white/10
                   sm:block
-                "
+                  ${iconMutedClass}
+                `}
               >
                 <IoMdSkipForward className="text-2xl" />
               </button>
@@ -1749,19 +1916,18 @@ const Player = () => {
               {/* MINI VOLUME */}
 
               <div
-                className="
+                className={`
                   hidden
                   items-center
                   gap-2
                   rounded-full
                   border
-                  border-white/10
-                  bg-white/5
                   px-3
                   py-2
                   backdrop-blur-xl
                   md:flex
-                "
+                  ${softPanelClass}
+                `}
               >
                 <button
                   type="button"
@@ -1773,11 +1939,7 @@ const Player = () => {
                       ? "Unmute"
                       : "Mute"
                   }
-                  className="
-                    text-white/70
-                    transition
-                    hover:text-white
-                  "
+                  className={iconMutedClass}
                 >
                   <VolumeIcon />
                 </button>
@@ -1786,8 +1948,8 @@ const Player = () => {
                   aria-label="Volume"
                   type="range"
                   min="0"
-                  max="1"
-                  step="0.01"
+                  max="100"
+                  step="1"
                   value={
                     isMuted
                       ? 0
@@ -1811,14 +1973,15 @@ const Player = () => {
                   toggleLike
                 }
                 title="Like"
-                className="
+                className={`
                   hidden
                   rounded-full
                   p-2
                   transition
                   hover:bg-white/10
                   sm:block
-                "
+                  ${iconMutedClass}
+                `}
               >
                 {isLiked ? (
                   <FaHeart className="text-lg text-red-500" />
@@ -1837,13 +2000,14 @@ const Player = () => {
                   )
                 }
                 title="Open full player"
-                className="
+                className={`
                   shrink-0
                   rounded-full
                   p-2
                   transition
                   hover:bg-white/10
-                "
+                  ${iconMutedClass}
+                `}
               >
                 <CiMaximize1 className="text-xl" />
               </button>
@@ -1883,21 +2047,18 @@ const Player = () => {
                       false
                     )
                   }
-                  className="
+                  className={`
                     rounded-full
                     border
-                    border-white/10
-                    bg-white/5
                     px-4
                     py-2
                     text-sm
                     font-medium
-                    text-white/80
                     backdrop-blur-xl
                     transition
                     hover:bg-white/10
-                    hover:text-white
-                  "
+                    ${softPanelClass}
+                  `}
                 >
                   ↓ Minimize
                 </button>
@@ -1910,14 +2071,14 @@ const Player = () => {
                   "
                 >
                   <span
-                    className="
+                    className={`
                       hidden
                       text-xs
-                      font-medium
+                      font-semibold
                       tracking-[0.2em]
-                      text-white/40
                       sm:block
-                    "
+                      ${mutedTextClass}
+                    `}
                   >
                     NOW PLAYING
                   </span>
@@ -1928,16 +2089,15 @@ const Player = () => {
                       share
                     }
                     title="Share"
-                    className="
+                    className={`
                       rounded-full
                       border
-                      border-white/10
-                      bg-white/5
                       p-2.5
                       backdrop-blur-xl
                       transition
                       hover:bg-white/10
-                    "
+                      ${softPanelClass}
+                    `}
                   >
                     <IoShareSocial className="text-xl" />
                   </button>
@@ -1952,7 +2112,7 @@ const Player = () => {
                 <div
                   className="
                     flex
-                    min-h-[40vh]
+                    min-h-[38vh]
                     flex-1
                     w-full
                     items-center
@@ -1960,17 +2120,18 @@ const Player = () => {
                     py-5
                   "
                 >
-                  <div className="relative">
-                    {/* ARTWORK GLOW */}
-
+                  <div
+                    className="
+                      relative
+                    "
+                  >
                     <div
                       className="
                         absolute
                         inset-0
                         scale-90
                         rounded-[2rem]
-                        bg-white/20
-                        opacity-30
+                        bg-red-500/20
                         blur-3xl
                       "
                     />
@@ -1989,7 +2150,7 @@ const Player = () => {
                         w-52
                         rounded-[1.75rem]
                         object-cover
-                        shadow-[0_30px_100px_rgba(0,0,0,0.75)]
+                        shadow-[0_30px_100px_rgba(0,0,0,0.7)]
                         ring-1
                         ring-white/10
                         transition-transform
@@ -2019,7 +2180,7 @@ const Player = () => {
                   ref={
                     lyricContainerRef
                   }
-                  className="
+                  className={`
                     mt-5
                     h-[45vh]
                     min-h-[280px]
@@ -2029,15 +2190,14 @@ const Player = () => {
                     overflow-y-auto
                     rounded-3xl
                     border
-                    border-white/10
-                    bg-black/25
                     px-3
                     py-8
                     shadow-inner
                     backdrop-blur-xl
                     sm:h-[48vh]
                     sm:px-6
-                  "
+                    ${softPanelClass}
+                  `}
                   style={{
                     scrollbarWidth:
                       "thin",
@@ -2091,17 +2251,17 @@ const Player = () => {
                                   isActive
                                     ? `
                                       scale-[1.03]
-                                      bg-white/10
+                                      bg-red-400/20
                                       font-bold
-                                      text-white
-                                      shadow-xl
+                                      text-red-500
+                                      shadow-[0_8px_30px_rgba(248,113,113,0.18)]
                                       ring-1
-                                      ring-white/10
+                                      ring-red-400/20
                                       sm:text-base
                                     `
                                     : `
-                                      text-white/30
-                                      hover:text-white/60
+                                      opacity-35
+                                      hover:opacity-70
                                     `
                                 }
                               `}
@@ -2131,7 +2291,7 @@ const Player = () => {
                           text-center
                           text-sm
                           leading-7
-                          text-white/70
+                          opacity-70
                         "
                       >
                         {safeDecode(
@@ -2148,7 +2308,7 @@ const Player = () => {
                         justify-center
                       "
                     >
-                      <p className="text-center text-white/40">
+                      <p className="opacity-50">
                         No lyrics available.
                       </p>
                     </div>
@@ -2179,12 +2339,12 @@ const Player = () => {
                 </h2>
 
                 <p
-                  className="
+                  className={`
                     mt-1
                     truncate
                     text-sm
-                    text-white/50
-                  "
+                    ${mutedTextClass}
+                  `}
                 >
                   {artistNames}
                 </p>
@@ -2203,7 +2363,7 @@ const Player = () => {
                   gap-2
                 "
               >
-                <span className="text-[11px] text-white/50">
+                <span className="text-[11px] opacity-50">
                   {formatTime(
                     currentTime
                   )}
@@ -2227,7 +2387,7 @@ const Player = () => {
                   "
                 />
 
-                <span className="text-[11px] text-white/50">
+                <span className="text-[11px] opacity-50">
                   {formatTime(
                     duration
                   )}
@@ -2244,8 +2404,8 @@ const Player = () => {
                   flex
                   items-center
                   justify-center
-                  gap-5
-                  sm:gap-8
+                  gap-4
+                  sm:gap-7
                 "
               >
                 {/* SHUFFLE */}
@@ -2263,8 +2423,8 @@ const Player = () => {
                     hover:bg-white/10
                     ${
                       shuffle
-                        ? "text-white"
-                        : "text-white/55 hover:text-white"
+                        ? "text-red-500"
+                        : "opacity-60 hover:opacity-100"
                     }
                   `}
                 >
@@ -2282,10 +2442,10 @@ const Player = () => {
                   className="
                     rounded-full
                     p-2
-                    text-white/80
+                    opacity-80
                     transition
                     hover:bg-white/10
-                    hover:text-white
+                    hover:opacity-100
                   "
                 >
                   <IoMdSkipBackward className="text-2xl sm:text-3xl" />
@@ -2308,7 +2468,7 @@ const Player = () => {
                     bg-white
                     p-4
                     text-black
-                    shadow-[0_12px_50px_rgba(255,255,255,0.2)]
+                    shadow-[0_12px_50px_rgba(255,255,255,0.25)]
                     transition
                     hover:scale-105
                     active:scale-95
@@ -2333,10 +2493,10 @@ const Player = () => {
                   className="
                     rounded-full
                     p-2
-                    text-white/80
+                    opacity-80
                     transition
                     hover:bg-white/10
-                    hover:text-white
+                    hover:opacity-100
                   "
                 >
                   <IoMdSkipForward className="text-2xl sm:text-3xl" />
@@ -2358,8 +2518,8 @@ const Player = () => {
                     ${
                       repeatMode ===
                       "one"
-                        ? "text-white"
-                        : "text-white/55 hover:text-white"
+                        ? "text-red-500"
+                        : "opacity-60 hover:opacity-100"
                     }
                   `}
                 >
@@ -2377,21 +2537,21 @@ const Player = () => {
               ================================================= */}
 
               <div
-                className="
+                className={`
                   mt-5
                   flex
                   w-full
-                  max-w-xs
+                  max-w-sm
                   items-center
                   gap-3
                   rounded-full
                   border
-                  border-white/10
-                  bg-black/30
                   px-4
                   py-2.5
+                  shadow-lg
                   backdrop-blur-2xl
-                "
+                  ${softPanelClass}
+                `}
               >
                 <button
                   type="button"
@@ -2405,9 +2565,9 @@ const Player = () => {
                   }
                   className="
                     shrink-0
-                    text-white/70
+                    opacity-70
                     transition
-                    hover:text-white
+                    hover:opacity-100
                   "
                 >
                   <VolumeIcon className="text-lg" />
@@ -2417,8 +2577,8 @@ const Player = () => {
                   aria-label="Volume"
                   type="range"
                   min="0"
-                  max="1"
-                  step="0.01"
+                  max="100"
+                  step="1"
                   value={
                     isMuted
                       ? 0
@@ -2435,18 +2595,18 @@ const Player = () => {
 
                 <span
                   className="
-                    w-9
+                    w-10
                     text-right
                     text-[11px]
-                    text-white/40
+                    opacity-50
                   "
                 >
                   {Math.round(
-                    (isMuted
+                    isMuted
                       ? 0
-                      : volume) *
-                      100
+                      : volume
                   )}
+                  %
                 </span>
               </div>
 
@@ -2479,7 +2639,7 @@ const Player = () => {
                   {isLiked ? (
                     <FaHeart className="text-xl text-red-500" />
                   ) : (
-                    <FaRegHeart className="text-xl text-white/80" />
+                    <FaRegHeart className="text-xl opacity-80" />
                   )}
                 </button>
 
@@ -2492,11 +2652,11 @@ const Player = () => {
                   className="
                     rounded-full
                     p-2
-                    text-white/80
+                    opacity-80
                     transition
                     hover:scale-110
                     hover:bg-white/10
-                    hover:text-white
+                    hover:opacity-100
                   "
                 >
                   <MdDownload className="text-2xl" />
@@ -2504,8 +2664,8 @@ const Player = () => {
               </div>
 
               {/* =================================================
-                  COVER / LYRICS
-                  BOTTOM
+                  COVER / LYRICS TOGGLE
+                  ALWAYS AT BOTTOM
               ================================================= */}
 
               <div
@@ -2514,22 +2674,21 @@ const Player = () => {
                   flex
                   w-full
                   justify-center
-                  pb-2
+                  pb-3
                 "
               >
                 <div
-                  className="
+                  className={`
                     flex
                     items-center
                     gap-1
                     rounded-full
                     border
-                    border-white/10
-                    bg-black/40
                     p-1
                     shadow-2xl
                     backdrop-blur-2xl
-                  "
+                    ${softPanelClass}
+                  `}
                 >
                   <button
                     type="button"
@@ -2540,16 +2699,16 @@ const Player = () => {
                     }
                     className={`
                       rounded-full
-                      px-6
+                      px-7
                       py-2.5
                       text-sm
-                      font-medium
+                      font-semibold
                       transition-all
                       duration-300
                       ${
                         !showLyrics
-                          ? "bg-white text-black shadow-lg"
-                          : "text-white/45 hover:text-white"
+                          ? "bg-red-500 text-white shadow-lg shadow-red-500/25"
+                          : "opacity-55 hover:opacity-100"
                       }
                     `}
                   >
@@ -2565,16 +2724,16 @@ const Player = () => {
                     }
                     className={`
                       rounded-full
-                      px-6
+                      px-7
                       py-2.5
                       text-sm
-                      font-medium
+                      font-semibold
                       transition-all
                       duration-300
                       ${
                         showLyrics
-                          ? "bg-white text-black shadow-lg"
-                          : "text-white/45 hover:text-white"
+                          ? "bg-red-500 text-white shadow-lg shadow-red-500/25"
+                          : "opacity-55 hover:opacity-100"
                       }
                     `}
                   >
@@ -2591,36 +2750,28 @@ const Player = () => {
                 <Link
                   to={`/albums/${detail.album.id}`}
                   className="
-                    mt-6
+                    mt-5
                     w-full
                     max-w-md
                   "
                 >
-                  <h3
-                    className="
-                      mb-2
-                      text-sm
-                      font-semibold
-                      text-white/80
-                    "
-                  >
+                  <h3 className="mb-2 text-sm font-semibold opacity-80">
                     From Album
                   </h3>
 
                   <div
-                    className="
+                    className={`
                       flex
                       items-center
                       gap-3
                       rounded-2xl
                       border
-                      border-white/10
-                      bg-white/5
                       p-2
                       backdrop-blur-xl
                       transition
                       hover:bg-white/10
-                    "
+                      ${softPanelClass}
+                    `}
                   >
                     <img
                       src={
@@ -2647,13 +2798,7 @@ const Player = () => {
                       }}
                     />
 
-                    <span
-                      className="
-                        truncate
-                        text-sm
-                        font-medium
-                      "
-                    >
+                    <span className="truncate text-sm font-medium">
                       {safeDecode(
                         detail
                           .album
@@ -2791,12 +2936,7 @@ const Player = () => {
                       pb-8
                     "
                   >
-                    <h3
-                      className="
-                        mb-3
-                        font-semibold
-                      "
-                    >
+                    <h3 className="mb-3 font-semibold">
                       Artists
                     </h3>
 
