@@ -13,9 +13,7 @@ import {
 
 import { IoShareSocial } from "react-icons/io5";
 
-import {
-  PiShuffleBold,
-} from "react-icons/pi";
+import { PiShuffleBold } from "react-icons/pi";
 
 import {
   LuRepeat,
@@ -70,10 +68,7 @@ const FALLBACK_IMAGE = "/Unknown.png";
 ========================================================= */
 
 const safeDecode = (value) => {
-  if (
-    value === null ||
-    value === undefined
-  ) {
+  if (value === null || value === undefined) {
     return "";
   }
 
@@ -200,7 +195,6 @@ const getSongId = (song) => {
 
 /* =========================================================
    LYRIC TIME
-   Supports seconds + milliseconds
 ========================================================= */
 
 const getLyricTime = (line) => {
@@ -238,9 +232,7 @@ const Player = () => {
     downloadSong,
     lyrics,
     coverImage,
-  } = useContext(
-    MusicContext
-  ) || {};
+  } = useContext(MusicContext) || {};
 
   /* =======================================================
      THEME
@@ -260,10 +252,6 @@ const Player = () => {
     theme === "dark" ||
     theme === "black" ||
     theme === "night";
-
-  /*
-    Re-render if data-theme changes
-  */
 
   useEffect(() => {
     if (
@@ -294,11 +282,6 @@ const Player = () => {
       observer.disconnect();
   }, []);
 
-  /*
-    Prevent unused-variable optimisation
-    from removing theme tracking.
-  */
-
   void themeVersion;
 
   /* =======================================================
@@ -325,14 +308,7 @@ const Player = () => {
 
   /* =======================================================
      VOLUME
-
-     IMPORTANT:
-     App.jsx uses localStorage("volume")
-     as 0 - 100.
-
-     Therefore Player also uses:
-     0   = muted
-     100 = maximum
+     0 - 100
   ======================================================= */
 
   const [volume, setVolume] =
@@ -554,10 +530,7 @@ const Player = () => {
       let activeIndex = -1;
 
       lyrics.lines.forEach(
-        (
-          line,
-          index
-        ) => {
+        (line, index) => {
           const lineTime =
             getLyricTime(line);
 
@@ -565,8 +538,7 @@ const Player = () => {
             lineTime !== null &&
             lineTime <= currentTime
           ) {
-            activeIndex =
-              index;
+            activeIndex = index;
           }
         }
       );
@@ -578,7 +550,7 @@ const Player = () => {
     ]);
 
   /* =======================================================
-     RESET WHEN SONG CHANGES
+     RESET SONG
   ======================================================= */
 
   useEffect(() => {
@@ -599,14 +571,11 @@ const Player = () => {
   }, [songId]);
 
   /* =======================================================
-     APPLY VOLUME
+     VOLUME
   ======================================================= */
 
   useEffect(() => {
-    if (
-      !audio ||
-      typeof audio !== "object"
-    ) {
+    if (!audio) {
       return;
     }
 
@@ -627,12 +596,7 @@ const Player = () => {
 
       audio.muted =
         Boolean(isMuted);
-    } catch (error) {
-      console.warn(
-        "Volume apply failed:",
-        error
-      );
-    }
+    } catch {}
 
     try {
       localStorage.setItem(
@@ -728,11 +692,6 @@ const Player = () => {
 
       updateTime();
 
-      /*
-        Reapply volume whenever a
-        new audio element loads.
-      */
-
       try {
         audio.volume =
           isMuted
@@ -822,7 +781,7 @@ const Player = () => {
   ]);
 
   /* =======================================================
-     FETCH DETAILS
+     FETCH SONG DETAILS
   ======================================================= */
 
   useEffect(() => {
@@ -915,7 +874,7 @@ const Player = () => {
       typeof MediaMetadata ===
         "undefined"
     ) {
-      return;
+      return undefined;
     }
 
     try {
@@ -1037,52 +996,49 @@ const Player = () => {
       lyricContainerRef.current;
 
     const frame =
-      requestAnimationFrame(
-        () => {
-          const activeElement =
-            container.querySelector(
-              `[data-lyric-index="${activeLyricIndex}"]`
-            );
+      requestAnimationFrame(() => {
+        const activeElement =
+          container.querySelector(
+            `[data-lyric-index="${activeLyricIndex}"]`
+          );
 
-          if (!activeElement) {
-            return;
-          }
-
-          const containerRect =
-            container.getBoundingClientRect();
-
-          const activeRect =
-            activeElement.getBoundingClientRect();
-
-          const relativeTop =
-            activeRect.top -
-            containerRect.top +
-            container.scrollTop;
-
-          const targetScroll =
-            relativeTop -
-            container.clientHeight /
-              2 +
-            activeElement.clientHeight /
-              2;
-
-          const maxScroll =
-            container.scrollHeight -
-            container.clientHeight;
-
-          container.scrollTo({
-            top: Math.max(
-              0,
-              Math.min(
-                targetScroll,
-                maxScroll
-              )
-            ),
-            behavior:
-              "smooth",
-          });
+        if (!activeElement) {
+          return;
         }
-      );
+
+        const containerRect =
+          container.getBoundingClientRect();
+
+        const activeRect =
+          activeElement.getBoundingClientRect();
+
+        const relativeTop =
+          activeRect.top -
+          containerRect.top +
+          container.scrollTop;
+
+        const targetScroll =
+          relativeTop -
+          container.clientHeight /
+            2 +
+          activeElement.clientHeight /
+            2;
+
+        const maxScroll =
+          container.scrollHeight -
+          container.clientHeight;
+
+        container.scrollTo({
+          top: Math.max(
+            0,
+            Math.min(
+              targetScroll,
+              maxScroll
+            )
+          ),
+          behavior: "smooth",
+        });
+      });
 
     return () =>
       cancelAnimationFrame(
@@ -1170,9 +1126,7 @@ const Player = () => {
         );
     } catch {}
 
-    setCurrentTime(
-      time
-    );
+    setCurrentTime(time);
   };
 
   /* =======================================================
@@ -1205,9 +1159,7 @@ const Player = () => {
         newVolume
       );
 
-      if (
-        newVolume > 0
-      ) {
+      if (newVolume > 0) {
         setPreviousVolume(
           newVolume
         );
@@ -1240,7 +1192,7 @@ const Player = () => {
     };
 
   /* =======================================================
-     MUTE / UNMUTE
+     MUTE
   ======================================================= */
 
   const toggleMute = () => {
@@ -1313,8 +1265,7 @@ const Player = () => {
       Math.max(
         0,
         Math.floor(
-          Number(value) ||
-            0
+          Number(value) || 0
         )
       );
 
@@ -1683,9 +1634,7 @@ const Player = () => {
               opacity-35
               blur-3xl
             "
-            onError={(
-              event
-            ) => {
+            onError={(event) => {
               event.currentTarget.src =
                 FALLBACK_IMAGE;
             }}
@@ -1746,8 +1695,6 @@ const Player = () => {
                 gap-3
               "
             >
-              {/* COVER */}
-
               <img
                 src={
                   artwork ||
@@ -1764,15 +1711,11 @@ const Player = () => {
                   ring-1
                   ring-white/10
                 "
-                onError={(
-                  event
-                ) => {
+                onError={(event) => {
                   event.currentTarget.src =
                     FALLBACK_IMAGE;
                 }}
               />
-
-              {/* INFO */}
 
               <div
                 className="
@@ -1800,6 +1743,8 @@ const Player = () => {
                   {artistNames}
                 </div>
 
+                {/* MINI RED PROGRESS */}
+
                 <div
                   className="
                     mt-1
@@ -1820,16 +1765,15 @@ const Player = () => {
                     min="0"
                     max="100"
                     step="0.1"
-                    value={
-                      progress
-                    }
-                    onChange={
-                      seek
-                    }
+                    value={progress}
+                    onChange={seek}
                     className="
-                      range
-                      w-full
+                      music-progress
+                      flex-1
                     "
+                    style={{
+                      "--progress": `${progress}%`,
+                    }}
                   />
 
                   <span className="text-[10px] opacity-60">
@@ -1839,8 +1783,6 @@ const Player = () => {
                   </span>
                 </div>
               </div>
-
-              {/* PREVIOUS */}
 
               <button
                 type="button"
@@ -1861,13 +1803,9 @@ const Player = () => {
                 <IoMdSkipBackward className="text-2xl" />
               </button>
 
-              {/* PLAY */}
-
               <button
                 type="button"
-                onClick={
-                  playPause
-                }
+                onClick={playPause}
                 title={
                   isPlaying
                     ? "Pause"
@@ -1891,8 +1829,6 @@ const Player = () => {
                   <FaPlay className="ml-0.5 text-base" />
                 )}
               </button>
-
-              {/* NEXT */}
 
               <button
                 type="button"
@@ -1939,7 +1875,9 @@ const Player = () => {
                       ? "Unmute"
                       : "Mute"
                   }
-                  className={iconMutedClass}
+                  className={
+                    iconMutedClass
+                  }
                 >
                   <VolumeIcon />
                 </button>
@@ -1965,8 +1903,6 @@ const Player = () => {
                 />
               </div>
 
-              {/* LIKE */}
-
               <button
                 type="button"
                 onClick={
@@ -1989,8 +1925,6 @@ const Player = () => {
                   <FaRegHeart className="text-lg" />
                 )}
               </button>
-
-              {/* MAXIMIZE */}
 
               <button
                 type="button"
@@ -2028,9 +1962,7 @@ const Player = () => {
                 items-center
               "
             >
-              {/* =================================================
-                  HEADER
-              ================================================= */}
+              {/* HEADER */}
 
               <div
                 className="
@@ -2085,9 +2017,7 @@ const Player = () => {
 
                   <button
                     type="button"
-                    onClick={
-                      share
-                    }
+                    onClick={share}
                     title="Share"
                     className={`
                       rounded-full
@@ -2104,9 +2034,7 @@ const Player = () => {
                 </div>
               </div>
 
-              {/* =================================================
-                  COVER / LYRICS AREA
-              ================================================= */}
+              {/* COVER / LYRICS */}
 
               {!showLyrics ? (
                 <div
@@ -2120,11 +2048,7 @@ const Player = () => {
                     py-5
                   "
                 >
-                  <div
-                    className="
-                      relative
-                    "
-                  >
+                  <div className="relative">
                     <div
                       className="
                         absolute
@@ -2141,9 +2065,7 @@ const Player = () => {
                         artwork ||
                         FALLBACK_IMAGE
                       }
-                      alt={
-                        songName
-                      }
+                      alt={songName}
                       className="
                         relative
                         h-52
@@ -2162,9 +2084,7 @@ const Player = () => {
                         lg:h-80
                         lg:w-80
                       "
-                      onError={(
-                        event
-                      ) => {
+                      onError={(event) => {
                         event.currentTarget.src =
                           FALLBACK_IMAGE;
                       }}
@@ -2172,10 +2092,6 @@ const Player = () => {
                   </div>
                 </div>
               ) : (
-                /* =================================================
-                   LYRICS
-                ================================================= */
-
                 <div
                   ref={
                     lyricContainerRef
@@ -2203,8 +2119,6 @@ const Player = () => {
                       "thin",
                     overscrollBehavior:
                       "contain",
-                    scrollBehavior:
-                      "smooth",
                   }}
                 >
                   {hasSyncedLyrics ? (
@@ -2316,9 +2230,7 @@ const Player = () => {
                 </div>
               )}
 
-              {/* =================================================
-                  SONG INFORMATION
-              ================================================= */}
+              {/* SONG INFORMATION */}
 
               <div
                 className="
@@ -2351,7 +2263,7 @@ const Player = () => {
               </div>
 
               {/* =================================================
-                  PROGRESS
+                  FULL RED PROGRESS BAR
               ================================================= */}
 
               <div
@@ -2363,7 +2275,7 @@ const Player = () => {
                   gap-2
                 "
               >
-                <span className="text-[11px] opacity-50">
+                <span className="w-10 text-[11px] opacity-50">
                   {formatTime(
                     currentTime
                   )}
@@ -2375,28 +2287,25 @@ const Player = () => {
                   min="0"
                   max="100"
                   step="0.1"
-                  value={
-                    progress
-                  }
-                  onChange={
-                    seek
-                  }
+                  value={progress}
+                  onChange={seek}
                   className="
-                    range
+                    music-progress
                     flex-1
                   "
+                  style={{
+                    "--progress": `${progress}%`,
+                  }}
                 />
 
-                <span className="text-[11px] opacity-50">
+                <span className="w-10 text-right text-[11px] opacity-50">
                   {formatTime(
                     duration
                   )}
                 </span>
               </div>
 
-              {/* =================================================
-                  MAIN CONTROLS
-              ================================================= */}
+              {/* CONTROLS */}
 
               <div
                 className="
@@ -2408,8 +2317,6 @@ const Player = () => {
                   sm:gap-7
                 "
               >
-                {/* SHUFFLE */}
-
                 <button
                   type="button"
                   onClick={() =>
@@ -2431,8 +2338,6 @@ const Player = () => {
                   <PiShuffleBold className="text-xl sm:text-2xl" />
                 </button>
 
-                {/* PREVIOUS */}
-
                 <button
                   type="button"
                   onClick={() =>
@@ -2450,8 +2355,6 @@ const Player = () => {
                 >
                   <IoMdSkipBackward className="text-2xl sm:text-3xl" />
                 </button>
-
-                {/* PLAY */}
 
                 <button
                   type="button"
@@ -2482,8 +2385,6 @@ const Player = () => {
                   )}
                 </button>
 
-                {/* NEXT */}
-
                 <button
                   type="button"
                   onClick={() =>
@@ -2501,8 +2402,6 @@ const Player = () => {
                 >
                   <IoMdSkipForward className="text-2xl sm:text-3xl" />
                 </button>
-
-                {/* REPEAT */}
 
                 <button
                   type="button"
@@ -2532,9 +2431,7 @@ const Player = () => {
                 </button>
               </div>
 
-              {/* =================================================
-                  VOLUME
-              ================================================= */}
+              {/* VOLUME */}
 
               <div
                 className={`
@@ -2610,9 +2507,7 @@ const Player = () => {
                 </span>
               </div>
 
-              {/* =================================================
-                  LIKE + DOWNLOAD
-              ================================================= */}
+              {/* LIKE / DOWNLOAD */}
 
               <div
                 className="
@@ -2663,10 +2558,7 @@ const Player = () => {
                 </button>
               </div>
 
-              {/* =================================================
-                  COVER / LYRICS TOGGLE
-                  ALWAYS AT BOTTOM
-              ================================================= */}
+              {/* COVER / LYRICS */}
 
               <div
                 className="
@@ -2742,9 +2634,7 @@ const Player = () => {
                 </div>
               </div>
 
-              {/* =================================================
-                  ALBUM
-              ================================================= */}
+              {/* ALBUM */}
 
               {detail?.album?.id && (
                 <Link
@@ -2790,9 +2680,7 @@ const Player = () => {
                         rounded-xl
                         object-cover
                       "
-                      onError={(
-                        event
-                      ) => {
+                      onError={(event) => {
                         event.currentTarget.src =
                           FALLBACK_IMAGE;
                       }}
@@ -2809,9 +2697,7 @@ const Player = () => {
                 </Link>
               )}
 
-              {/* =================================================
-                  SUGGESTIONS
-              ================================================= */}
+              {/* SUGGESTIONS */}
 
               {suggestionList.length >
                 0 && (
@@ -2905,9 +2791,7 @@ const Player = () => {
                             item?.id ||
                             index
                           }
-                          song={
-                            item
-                          }
+                          song={item}
                         />
                       )
                     )}
@@ -2915,9 +2799,7 @@ const Player = () => {
                 </div>
               )}
 
-              {/* =================================================
-                  ARTISTS
-              ================================================= */}
+              {/* ARTISTS */}
 
               {Array.isArray(
                 currentSong
