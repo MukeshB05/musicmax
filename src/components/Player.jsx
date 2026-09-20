@@ -9,6 +9,7 @@ import {
 import {
   IoMdSkipBackward,
   IoMdSkipForward,
+  IoIosClose,
 } from "react-icons/io";
 
 import { IoShareSocial } from "react-icons/io5";
@@ -1632,7 +1633,7 @@ const Player = () => {
             z-10
             ${
               isMaximized
-                ? "h-full overflow-y-auto p-3 sm:p-6"
+                ? "h-full overflow-y-auto px-3 pb-8 pt-0 sm:px-6 sm:pb-10"
                 : "p-3 lg:px-6"
             }
           `}
@@ -1863,77 +1864,35 @@ const Player = () => {
                 items-center
               "
             >
-              {/* HEADER */}
+              {/* CLOSE BUTTON - NO TOP NAVBAR */}
 
-              <div
+              <button
+                type="button"
+                onClick={() => setIsMaximized(false)}
+                title="Close"
+                aria-label="Close player"
                 className="
+                  absolute
+                  right-3
+                  top-3
+                  z-[100]
                   flex
-                  w-full
+                  h-12
+                  w-12
                   items-center
-                  justify-between
+                  justify-center
+                  rounded-full
+                  text-white
+                  transition
+                  hover:bg-white/10
+                  hover:scale-105
+                  active:scale-95
+                  sm:right-5
+                  sm:top-5
                 "
               >
-                <button
-                  type="button"
-                  onClick={() =>
-                    setIsMaximized(
-                      false
-                    )
-                  }
-                  className={`
-                    rounded-full
-                    border
-                    px-4
-                    py-2
-                    text-sm
-                    font-medium
-                    backdrop-blur-xl
-                    transition
-                    hover:bg-white/10
-                    ${softPanelClass}
-                  `}
-                >
-                  ↓ Minimize
-                </button>
-
-                <div
-                  className="
-                    flex
-                    items-center
-                    gap-2
-                  "
-                >
-                  <span
-                    className={`
-                      hidden
-                      text-xs
-                      font-semibold
-                      tracking-[0.2em]
-                      sm:block
-                      ${mutedTextClass}
-                    `}
-                  >
-                    NOW PLAYING
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={share}
-                    title="Share"
-                    className={`
-                      rounded-full
-                      border
-                      p-2.5
-                      backdrop-blur-xl
-                      transition
-                      hover:bg-white/10
-                      ${softPanelClass}
-                    `}
-                  >
-                    <IoShareSocial className="text-xl" />
-                  </button>
-                </div>
-              </div>
+                <IoIosClose className="text-5xl" />
+              </button>
 
               {/* COVER / LYRICS */}
 
@@ -1941,12 +1900,15 @@ const Player = () => {
                 <div
                   className="
                     flex
-                    min-h-[38vh]
-                    flex-1
                     w-full
-                    items-center
+                    shrink-0
+                    items-start
                     justify-center
-                    py-5
+                    px-1
+                    pb-2
+                    pt-3
+                    sm:pt-4
+                    md:pt-5
                   "
                 >
                   <div className="relative">
@@ -1955,8 +1917,8 @@ const Player = () => {
                         absolute
                         inset-0
                         scale-90
-                        rounded-[2rem]
-                        bg-red-500/20
+                        rounded-[2.5rem]
+                        bg-red-500/25
                         blur-3xl
                       "
                     />
@@ -1969,21 +1931,21 @@ const Player = () => {
                       alt={songName}
                       className="
                         relative
-                        h-52
-                        w-52
-                        rounded-[1.75rem]
+                        h-[260px]
+                        w-[260px]
+                        rounded-[2rem]
                         object-cover
-                        shadow-[0_30px_100px_rgba(0,0,0,0.7)]
+                        shadow-[0_30px_100px_rgba(0,0,0,0.75)]
                         ring-1
                         ring-white/10
                         transition-transform
                         duration-700
-                        sm:h-64
-                        sm:w-64
-                        md:h-72
-                        md:w-72
-                        lg:h-80
-                        lg:w-80
+                        sm:h-[320px]
+                        sm:w-[320px]
+                        md:h-[380px]
+                        md:w-[380px]
+                        lg:h-[420px]
+                        lg:w-[420px]
                       "
                       onError={(event) => {
                         event.currentTarget.src =
@@ -1998,21 +1960,24 @@ const Player = () => {
                     lyricContainerRef
                   }
                   className={`
-                    mt-5
-                    h-[45vh]
-                    min-h-[280px]
+                    mt-2
+                    h-[48vh]
+                    min-h-[320px]
+                    max-h-[560px]
                     w-full
-                    max-w-3xl
+                    max-w-4xl
                     overflow-x-hidden
                     overflow-y-auto
                     rounded-3xl
                     border
                     px-3
-                    py-8
+                    py-6
                     shadow-inner
                     backdrop-blur-xl
-                    sm:h-[48vh]
+                    sm:h-[50vh]
+                    sm:min-h-[360px]
                     sm:px-6
+                    md:h-[52vh]
                     ${softPanelClass}
                   `}
                   style={{
@@ -2332,64 +2297,106 @@ const Player = () => {
                 </button>
               </div>
 
-              {/* LIKE / DOWNLOAD */}
+              {/* LIKE / SHARE / DOWNLOAD */}
 
               <div
                 className="
-                  mt-4
+                  mt-5
                   flex
                   items-center
-                  gap-7
+                  justify-center
+                  gap-3
                 "
               >
                 <button
                   type="button"
-                  onClick={
-                    toggleLike
-                  }
+                  onClick={toggleLike}
                   title="Like"
-                  className="
+                  aria-label="Like song"
+                  className={`
+                    flex
+                    h-11
+                    w-11
+                    items-center
+                    justify-center
                     rounded-full
-                    p-2
+                    border
+                    backdrop-blur-xl
                     transition
                     hover:scale-110
                     hover:bg-white/10
-                  "
+                    active:scale-95
+                    ${softPanelClass}
+                  `}
                 >
                   {isLiked ? (
                     <FaHeart className="text-xl text-red-500" />
                   ) : (
-                    <FaRegHeart className="text-xl opacity-80" />
+                    <FaRegHeart className="text-xl" />
                   )}
                 </button>
 
                 <button
                   type="button"
-                  onClick={
-                    handleDownload
-                  }
+                  onClick={share}
+                  title="Share"
+                  aria-label="Share song"
+                  className={`
+                    flex
+                    h-11
+                    w-11
+                    items-center
+                    justify-center
+                    rounded-full
+                    border
+                    backdrop-blur-xl
+                    transition
+                    hover:scale-110
+                    hover:bg-white/10
+                    active:scale-95
+                    ${softPanelClass}
+                  `}
+                >
+                  <IoShareSocial className="text-xl" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownload}
                   disabled={isDownloading}
                   title={
                     isDownloading
                       ? "Downloading..."
                       : "Download MP3"
                   }
-                  className="
+                  aria-label="Download MP3"
+                  className={`
+                    flex
+                    h-11
+                    w-11
+                    items-center
+                    justify-center
                     rounded-full
-                    p-2
-                    opacity-80
+                    border
+                    backdrop-blur-xl
                     transition
                     hover:scale-110
                     hover:bg-white/10
-                    hover:opacity-100
-                  "
+                    active:scale-95
+                    disabled:cursor-not-allowed
+                    disabled:opacity-50
+                    ${softPanelClass}
+                  `}
                 >
                   <MdDownload
-                    className={`text-2xl ${
-                      isDownloading
-                        ? "animate-pulse opacity-50"
-                        : ""
-                    }`}
+                    className={`
+                      text-2xl
+                      ${
+                        isDownloading
+                          ? "animate-pulse"
+                          : ""
+                      }
+                    `}
                   />
                 </button>
               </div>
