@@ -62,7 +62,10 @@ const FALLBACK_IMAGE = "/Unknown.png";
 ========================================================= */
 
 const safeDecode = (value) => {
-  if (value === null || value === undefined) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
     return "";
   }
 
@@ -249,8 +252,7 @@ const Player = () => {
 
   useEffect(() => {
     if (
-      typeof document ===
-      "undefined"
+      typeof document === "undefined"
     ) {
       return undefined;
     }
@@ -506,8 +508,6 @@ const Player = () => {
 
   /* =======================================================
      DEFAULT AUDIO VOLUME
-     Volume controls are intentionally removed.
-     Audio always starts at 100% volume.
   ======================================================= */
 
   useEffect(() => {
@@ -1504,8 +1504,6 @@ const Player = () => {
                   {artistNames}
                 </div>
 
-                {/* MINI RED PROGRESS */}
-
                 <div
                   className="
                     mt-1
@@ -1612,29 +1610,6 @@ const Player = () => {
 
               <button
                 type="button"
-                onClick={
-                  toggleLike
-                }
-                title="Like"
-                className={`
-                  hidden
-                  rounded-full
-                  p-2
-                  transition
-                  hover:bg-white/10
-                  sm:block
-                  ${iconMutedClass}
-                `}
-              >
-                {isLiked ? (
-                  <FaHeart className="text-lg text-red-500" />
-                ) : (
-                  <FaRegHeart className="text-lg" />
-                )}
-              </button>
-
-              <button
-                type="button"
                 onClick={() =>
                   setIsMaximized(
                     true
@@ -1669,79 +1644,52 @@ const Player = () => {
                 items-center
               "
             >
-              {/* HEADER */}
+              {/* =================================================
+                  HEADER
+              ================================================= */}
 
               <div
                 className="
                   flex
                   w-full
                   items-center
-                  justify-between
+                  justify-end
                 "
               >
+                {/* CLOSE */}
+
                 <button
                   type="button"
-                  onClick={() =>
-                    setIsMaximized(
-                      false
-                    )
-                  }
+                  onClick={() => {
+                    setIsMaximized(false);
+                    setShowLyrics(false);
+                  }}
+                  title="Close"
+                  aria-label="Close player"
                   className={`
+                    flex
+                    h-10
+                    w-10
+                    items-center
+                    justify-center
                     rounded-full
                     border
-                    px-4
-                    py-2
-                    text-sm
+                    text-xl
                     font-medium
                     backdrop-blur-xl
                     transition
-                    hover:bg-white/10
+                    hover:bg-red-500
+                    hover:text-white
                     ${softPanelClass}
                   `}
                 >
-                  ↓ Minimize
+                  ✕
                 </button>
-
-                <div
-                  className="
-                    flex
-                    items-center
-                    gap-2
-                  "
-                >
-                  <span
-                    className={`
-                      hidden
-                      text-xs
-                      font-semibold
-                      tracking-[0.2em]
-                      sm:block
-                      ${mutedTextClass}
-                    `}
-                  >
-                    NOW PLAYING
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={share}
-                    title="Share"
-                    className={`
-                      rounded-full
-                      border
-                      p-2.5
-                      backdrop-blur-xl
-                      transition
-                      hover:bg-white/10
-                      ${softPanelClass}
-                    `}
-                  >
-                    <IoShareSocial className="text-xl" />
-                  </button>
-                </div>
               </div>
 
-              {/* COVER / LYRICS */}
+              {/* =================================================
+                  COVER / LYRICS
+              ================================================= */}
 
               {!showLyrics ? (
                 <div
@@ -1937,7 +1885,9 @@ const Player = () => {
                 </div>
               )}
 
-              {/* SONG INFORMATION */}
+              {/* =================================================
+                  SONG INFORMATION
+              ================================================= */}
 
               <div
                 className="
@@ -2012,7 +1962,9 @@ const Player = () => {
                 </span>
               </div>
 
-              {/* CONTROLS */}
+              {/* =================================================
+                  CONTROLS
+              ================================================= */}
 
               <div
                 className="
@@ -2024,6 +1976,8 @@ const Player = () => {
                   sm:gap-7
                 "
               >
+                {/* SHUFFLE */}
+
                 <button
                   type="button"
                   onClick={() =>
@@ -2045,6 +1999,8 @@ const Player = () => {
                   <PiShuffleBold className="text-xl sm:text-2xl" />
                 </button>
 
+                {/* PREVIOUS */}
+
                 <button
                   type="button"
                   onClick={() =>
@@ -2062,6 +2018,8 @@ const Player = () => {
                 >
                   <IoMdSkipBackward className="text-2xl sm:text-3xl" />
                 </button>
+
+                {/* PLAY / PAUSE */}
 
                 <button
                   type="button"
@@ -2092,6 +2050,8 @@ const Player = () => {
                   )}
                 </button>
 
+                {/* NEXT */}
+
                 <button
                   type="button"
                   onClick={() =>
@@ -2109,6 +2069,8 @@ const Player = () => {
                 >
                   <IoMdSkipForward className="text-2xl sm:text-3xl" />
                 </button>
+
+                {/* REPEAT */}
 
                 <button
                   type="button"
@@ -2138,36 +2100,93 @@ const Player = () => {
                 </button>
               </div>
 
-              {/* LIKE / DOWNLOAD */}
+              {/* =================================================
+                  LIKE + SHARE + DOWNLOAD
+              ================================================= */}
 
               <div
-                className="
-                  mt-4
+                className={`
+                  mt-5
                   flex
                   items-center
-                  gap-7
-                "
+                  justify-center
+                  gap-1
+                  rounded-full
+                  border
+                  p-1.5
+                  shadow-2xl
+                  backdrop-blur-2xl
+                  ${softPanelClass}
+                `}
               >
+                {/* LIKE */}
+
                 <button
                   type="button"
                   onClick={
                     toggleLike
                   }
-                  title="Like"
-                  className="
+                  title={
+                    isLiked
+                      ? "Unlike"
+                      : "Like"
+                  }
+                  aria-label={
+                    isLiked
+                      ? "Unlike song"
+                      : "Like song"
+                  }
+                  className={`
+                    flex
+                    h-11
+                    w-11
+                    items-center
+                    justify-center
                     rounded-full
-                    p-2
-                    transition
+                    transition-all
+                    duration-200
                     hover:scale-110
                     hover:bg-white/10
-                  "
+                    ${
+                      isLiked
+                        ? "text-red-500"
+                        : "opacity-80 hover:opacity-100"
+                    }
+                  `}
                 >
                   {isLiked ? (
-                    <FaHeart className="text-xl text-red-500" />
+                    <FaHeart className="text-xl" />
                   ) : (
-                    <FaRegHeart className="text-xl opacity-80" />
+                    <FaRegHeart className="text-xl" />
                   )}
                 </button>
+
+                {/* SHARE */}
+
+                <button
+                  type="button"
+                  onClick={share}
+                  title="Share"
+                  aria-label="Share song"
+                  className="
+                    flex
+                    h-11
+                    w-11
+                    items-center
+                    justify-center
+                    rounded-full
+                    opacity-80
+                    transition-all
+                    duration-200
+                    hover:scale-110
+                    hover:bg-white/10
+                    hover:opacity-100
+                  "
+                >
+                  <IoShareSocial className="text-xl" />
+                </button>
+
+                {/* DOWNLOAD */}
 
                 <button
                   type="button"
@@ -2175,11 +2194,17 @@ const Player = () => {
                     handleDownload
                   }
                   title="Download"
+                  aria-label="Download song"
                   className="
+                    flex
+                    h-11
+                    w-11
+                    items-center
+                    justify-center
                     rounded-full
-                    p-2
                     opacity-80
-                    transition
+                    transition-all
+                    duration-200
                     hover:scale-110
                     hover:bg-white/10
                     hover:opacity-100
@@ -2189,7 +2214,9 @@ const Player = () => {
                 </button>
               </div>
 
-              {/* COVER / LYRICS */}
+              {/* =================================================
+                  COVER / LYRICS SWITCH
+              ================================================= */}
 
               <div
                 className="
@@ -2265,7 +2292,9 @@ const Player = () => {
                 </div>
               </div>
 
-              {/* ALBUM */}
+              {/* =================================================
+                  ALBUM
+              ================================================= */}
 
               {detail?.album?.id && (
                 <Link
@@ -2328,7 +2357,9 @@ const Player = () => {
                 </Link>
               )}
 
-              {/* SUGGESTIONS */}
+              {/* =================================================
+                  SUGGESTIONS
+              ================================================= */}
 
               {suggestionList.length >
                 0 && (
@@ -2430,7 +2461,9 @@ const Player = () => {
                 </div>
               )}
 
-              {/* ARTISTS */}
+              {/* =================================================
+                  ARTISTS
+              ================================================= */}
 
               {Array.isArray(
                 currentSong
