@@ -27,12 +27,6 @@ import {
   FaRegHeart,
 } from "react-icons/fa";
 
-import {
-  FaVolumeHigh,
-  FaVolumeLow,
-  FaVolumeXmark,
-} from "react-icons/fa6";
-
 import { MdDownload } from "react-icons/md";
 
 import { CiMaximize1 } from "react-icons/ci";
@@ -307,66 +301,6 @@ const Player = () => {
     useState([]);
 
   /* =======================================================
-     VOLUME
-     0 - 100
-  ======================================================= */
-
-  const [volume, setVolume] =
-    useState(() => {
-      try {
-        const saved = Number(
-          localStorage.getItem(
-            "volume"
-          )
-        );
-
-        if (
-          Number.isFinite(saved) &&
-          saved >= 0 &&
-          saved <= 100
-        ) {
-          return saved;
-        }
-      } catch {}
-
-      return 100;
-    });
-
-  const [previousVolume, setPreviousVolume] =
-    useState(() => {
-      try {
-        const saved = Number(
-          localStorage.getItem(
-            "previousVolume"
-          )
-        );
-
-        if (
-          Number.isFinite(saved) &&
-          saved > 0 &&
-          saved <= 100
-        ) {
-          return saved;
-        }
-      } catch {}
-
-      return 100;
-    });
-
-  const [isMuted, setIsMuted] =
-    useState(() => {
-      try {
-        return (
-          localStorage.getItem(
-            "isMuted"
-          ) === "true"
-        );
-      } catch {
-        return false;
-      }
-    });
-
-  /* =======================================================
      LIKED SONGS
   ======================================================= */
 
@@ -571,7 +505,9 @@ const Player = () => {
   }, [songId]);
 
   /* =======================================================
-     VOLUME
+     DEFAULT AUDIO VOLUME
+     Volume controls are intentionally removed.
+     Audio always starts at 100% volume.
   ======================================================= */
 
   useEffect(() => {
@@ -579,54 +515,11 @@ const Player = () => {
       return;
     }
 
-    const safeVolume =
-      Math.min(
-        100,
-        Math.max(
-          0,
-          Number(volume) || 0
-        )
-      );
-
     try {
-      audio.volume =
-        isMuted
-          ? 0
-          : safeVolume / 100;
-
-      audio.muted =
-        Boolean(isMuted);
+      audio.volume = 1;
+      audio.muted = false;
     } catch {}
-
-    try {
-      localStorage.setItem(
-        "volume",
-        String(safeVolume)
-      );
-
-      localStorage.setItem(
-        "previousVolume",
-        String(
-          Math.max(
-            1,
-            Number(
-              previousVolume
-            ) || 100
-          )
-        )
-      );
-
-      localStorage.setItem(
-        "isMuted",
-        String(isMuted)
-      );
-    } catch {}
-  }, [
-    audio,
-    volume,
-    isMuted,
-    previousVolume,
-  ]);
+  }, [audio]);
 
   /* =======================================================
      AUDIO EVENTS
@@ -693,13 +586,8 @@ const Player = () => {
       updateTime();
 
       try {
-        audio.volume =
-          isMuted
-            ? 0
-            : volume / 100;
-
-        audio.muted =
-          isMuted;
+        audio.volume = 1;
+        audio.muted = false;
       } catch {}
     };
 
@@ -758,8 +646,6 @@ const Player = () => {
     audio,
     nextSong,
     repeatMode,
-    volume,
-    isMuted,
   ]);
 
   /* =======================================================
@@ -1128,131 +1014,6 @@ const Player = () => {
 
     setCurrentTime(time);
   };
-
-  /* =======================================================
-     VOLUME CHANGE
-  ======================================================= */
-
-  const handleVolumeChange =
-    (event) => {
-      const value =
-        Number(
-          event.target.value
-        );
-
-      if (
-        !Number.isFinite(value)
-      ) {
-        return;
-      }
-
-      const newVolume =
-        Math.min(
-          100,
-          Math.max(
-            0,
-            value
-          )
-        );
-
-      setVolume(
-        newVolume
-      );
-
-      if (newVolume > 0) {
-        setPreviousVolume(
-          newVolume
-        );
-
-        setIsMuted(
-          false
-        );
-
-        if (audio) {
-          try {
-            audio.volume =
-              newVolume / 100;
-
-            audio.muted =
-              false;
-          } catch {}
-        }
-      } else {
-        setIsMuted(
-          true
-        );
-
-        if (audio) {
-          try {
-            audio.volume = 0;
-            audio.muted = true;
-          } catch {}
-        }
-      }
-    };
-
-  /* =======================================================
-     MUTE
-  ======================================================= */
-
-  const toggleMute = () => {
-    if (
-      isMuted ||
-      volume === 0
-    ) {
-      const restore =
-        previousVolume > 0
-          ? previousVolume
-          : 100;
-
-      setVolume(
-        restore
-      );
-
-      setIsMuted(
-        false
-      );
-
-      if (audio) {
-        try {
-          audio.volume =
-            restore / 100;
-
-          audio.muted =
-            false;
-        } catch {}
-      }
-
-      return;
-    }
-
-    setPreviousVolume(
-      volume
-    );
-
-    setIsMuted(
-      true
-    );
-
-    if (audio) {
-      try {
-        audio.volume = 0;
-        audio.muted = true;
-      } catch {}
-    }
-  };
-
-  /* =======================================================
-     VOLUME ICON
-  ======================================================= */
-
-  const VolumeIcon =
-    isMuted ||
-    volume === 0
-      ? FaVolumeXmark
-      : volume < 50
-      ? FaVolumeLow
-      : FaVolumeHigh;
 
   /* =======================================================
      FORMAT TIME
@@ -1849,60 +1610,6 @@ const Player = () => {
                 <IoMdSkipForward className="text-2xl" />
               </button>
 
-              {/* MINI VOLUME */}
-
-              <div
-                className={`
-                  hidden
-                  items-center
-                  gap-2
-                  rounded-full
-                  border
-                  px-3
-                  py-2
-                  backdrop-blur-xl
-                  md:flex
-                  ${softPanelClass}
-                `}
-              >
-                <button
-                  type="button"
-                  onClick={
-                    toggleMute
-                  }
-                  title={
-                    isMuted
-                      ? "Unmute"
-                      : "Mute"
-                  }
-                  className={
-                    iconMutedClass
-                  }
-                >
-                  <VolumeIcon />
-                </button>
-
-                <input
-                  aria-label="Volume"
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={
-                    isMuted
-                      ? 0
-                      : volume
-                  }
-                  onChange={
-                    handleVolumeChange
-                  }
-                  className="
-                    range
-                    w-20
-                  "
-                />
-              </div>
-
               <button
                 type="button"
                 onClick={
@@ -2429,82 +2136,6 @@ const Player = () => {
                     <LuRepeat className="text-xl sm:text-2xl" />
                   )}
                 </button>
-              </div>
-
-              {/* VOLUME */}
-
-              <div
-                className={`
-                  mt-5
-                  flex
-                  w-full
-                  max-w-sm
-                  items-center
-                  gap-3
-                  rounded-full
-                  border
-                  px-4
-                  py-2.5
-                  shadow-lg
-                  backdrop-blur-2xl
-                  ${softPanelClass}
-                `}
-              >
-                <button
-                  type="button"
-                  onClick={
-                    toggleMute
-                  }
-                  title={
-                    isMuted
-                      ? "Unmute"
-                      : "Mute"
-                  }
-                  className="
-                    shrink-0
-                    opacity-70
-                    transition
-                    hover:opacity-100
-                  "
-                >
-                  <VolumeIcon className="text-lg" />
-                </button>
-
-                <input
-                  aria-label="Volume"
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value={
-                    isMuted
-                      ? 0
-                      : volume
-                  }
-                  onChange={
-                    handleVolumeChange
-                  }
-                  className="
-                    range
-                    flex-1
-                  "
-                />
-
-                <span
-                  className="
-                    w-10
-                    text-right
-                    text-[11px]
-                    opacity-50
-                  "
-                >
-                  {Math.round(
-                    isMuted
-                      ? 0
-                      : volume
-                  )}
-                  %
-                </span>
               </div>
 
               {/* LIKE / DOWNLOAD */}
