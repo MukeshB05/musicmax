@@ -30,6 +30,7 @@ import {
 import { MdDownload } from "react-icons/md";
 
 import { ID3Writer } from "browser-id3-writer";
+import { Mp3Encoder } from "@breezystack/lamejs";
 
 import { CiMaximize1 } from "react-icons/ci";
 
@@ -1173,13 +1174,10 @@ const Player = () => {
   };
 
   /* =======================================================
-     DOWNLOAD MP3 WITH ID3 METADATA
-     - Song title
-     - Artist name
-     - Album name
-     - Album cover artwork
-     - Falls back to the original MP3 when tagging is blocked
-       by remote-server CORS restrictions.
+     DOWNLOAD — ALWAYS CREATE A REAL MP3
+     Source can be M4A/AAC or MP3.
+     M4A/AAC is decoded with Web Audio and re-encoded to MP3.
+     ID3 metadata + front album artwork are then embedded.
   ======================================================= */
 
   const handleDownload = async () => {
@@ -1212,8 +1210,7 @@ const Player = () => {
           currentSong?.album?.name ||
           currentSong?.albumName ||
           "MusicMax"
-      ).trim() ||
-      "MusicMax";
+      ).trim() || "MusicMax";
 
     const filename =
       `${title} - ${artist}.mp3`
@@ -1222,11 +1219,8 @@ const Player = () => {
         .trim();
 
     const downloadBlob = (blob, name) => {
-      const objectUrl =
-        URL.createObjectURL(blob);
-
-      const link =
-        document.createElement("a");
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
 
       link.href = objectUrl;
       link.download = name;
@@ -1238,14 +1232,13 @@ const Player = () => {
 
       window.setTimeout(() => {
         URL.revokeObjectURL(objectUrl);
-      }, 1500);
+      }, 3000);
     };
 
     const dataUrlToArrayBuffer = (dataUrl) => {
-      const match =
-        String(dataUrl).match(
-          /^data:([^;,]+)?(;base64)?,(.*)$/s
-        );
+      const match = String(dataUrl).match(
+        /^data:([^;,]+)?(;base64)?,(.*)$/s
+      );
 
       if (!match) {
         return null;
@@ -1265,9 +1258,9 @@ const Player = () => {
         return bytes.buffer;
       }
 
-      return new TextEncoder().encode(
-        decodeURIComponent(data)
-      ).buffer;
+      return new TextEncoder()
+        .encode(decodeURIComponent(data))
+        .buffer;
     };
 
     const getArrayBuffer = async (resourceUrl) => {
@@ -1299,26 +1292,165 @@ const Player = () => {
       return response.arrayBuffer();
     };
 
+    /* Convert ANY browser-decodable audio (M4A/AAC/MP3/etc.) to real MP3. */
+    const convertAudioToMp3 = async (sourceBuffer) => {
+      const AudioContextClass =
+        window.AudioContext ||
+        window.webkitAudioContext;
+
+      if (!AudioContextClass) {
+        throw new Error(
+          "Web Audio is not supported by this browser."
+        );
+      }
+
+      const audioContext = new AudioContextClass();
+
+      try {
+        const decoded = await audioContext.decodeAudioData(
+          sourceBuffer.slice(0)
+        );
+
+        const targetSampleRate = 44100;
+        let rendered = decoded;
+
+        /* Normalize to 44.1 kHz for broad MP3 compatibility. */
+        if (decoded.sampleRate !== targetSampleRate) {
+          const frameCount = Math.ceil(
+            decoded.duration * targetSampleRate
+          );
+
+          const offlineContext = new OfflineAudioContext(
+            decoded.numberOfChannels,
+            frameCount,
+            targetSampleRate
+          );
+
+          const source = offlineContext.createBufferSource();
+          source.buffer = decoded;
+          source.connect(offlineContext.destination);
+          source.start(0);
+
+          rendered = await offlineContext.startRendering();
+        }
+
+        const channels = Math.min(
+          2,
+          Math.max(1, rendered.numberOfChannels)
+        );
+
+        const leftFloat = rendered.getChannelData(0);
+        const rightFloat =
+          channels === 2
+            ? rendered.getChannelData(1)
+            : leftFloat;
+
+        const left = new Int16Array(leftFloat.length);
+        const right = new Int16Array(rightFloat.length);
+
+        for (let index = 0; index < leftFloat.length; index += 1) {
+          const leftSample = Math.max(
+            -1,
+            Math.min(1, leftFloat[index])
+          );
+
+          const rightSample = Math.max(
+            -1,
+            Math.min(1, rightFloat[index])
+          );
+
+          left[index] =
+            leftSample < 0
+              ? Math.round(leftSample * 32768)
+              : Math.round(leftSample * 32767);
+
+          right[index] =
+            rightSample < 0
+              ? Math.round(rightSample * 32768)
+              : Math.round(rightSample * 32767);
+        }
+
+        const encoder = new Mp3Encoder(
+          channels,
+          targetSampleRate,
+          192
+        );
+
+        const mp3Parts = [];
+        const blockSize = 1152;
+
+        for (
+          let offset = 0;
+          offset < left.length;
+          offset += blockSize
+        ) {
+          const leftChunk = left.subarray(
+            offset,
+            Math.min(offset + blockSize, left.length)
+          );
+
+          let encoded;
+
+          if (channels === 2) {
+            const rightChunk = right.subarray(
+              offset,
+              Math.min(offset + blockSize, right.length)
+            );
+
+            encoded = encoder.encodeBuffer(
+              leftChunk,
+              rightChunk
+            );
+          } else {
+            encoded = encoder.encodeBuffer(leftChunk);
+          }
+
+          if (encoded?.length) {
+            mp3Parts.push(new Int8Array(encoded));
+          }
+        }
+
+        const flushed = encoder.flush();
+
+        if (flushed?.length) {
+          mp3Parts.push(new Int8Array(flushed));
+        }
+
+        if (!mp3Parts.length) {
+          throw new Error("MP3 encoder produced no audio data.");
+        }
+
+        return new Blob(mp3Parts, {
+          type: "audio/mpeg",
+        });
+      } finally {
+        try {
+          await audioContext.close();
+        } catch {}
+      }
+    };
+
     setIsDownloading(true);
 
     try {
-      const audioBuffer =
-        await getArrayBuffer(url);
+      /* 1. Download source M4A/AAC/MP3. */
+      const sourceBuffer = await getArrayBuffer(url);
 
-      const writer =
-        new ID3Writer(audioBuffer);
+      /* 2. ALWAYS produce a real MPEG/MP3 file. */
+      const mp3Blob = await convertAudioToMp3(sourceBuffer);
+      const mp3Buffer = await mp3Blob.arrayBuffer();
+
+      /* 3. Add title, artist, album and album cover to the MP3. */
+      const writer = new ID3Writer(mp3Buffer);
 
       writer
         .setFrame("TIT2", title)
         .setFrame("TPE1", [artist])
         .setFrame("TALB", album);
 
-      // Album artwork is optional: if the image server blocks CORS,
-      // the MP3 will still receive title/artist/album metadata.
       if (artwork && artwork !== FALLBACK_IMAGE) {
         try {
-          const coverBuffer =
-            await getArrayBuffer(artwork);
+          const coverBuffer = await getArrayBuffer(artwork);
 
           writer.setFrame("APIC", {
             type: 3,
@@ -1327,7 +1459,7 @@ const Player = () => {
           });
         } catch (coverError) {
           console.warn(
-            "Album cover metadata could not be embedded:",
+            "Album cover could not be embedded:",
             coverError
           );
         }
@@ -1335,55 +1467,14 @@ const Player = () => {
 
       writer.addTag();
 
-      const taggedBlob =
-        writer.getBlob();
-
-      downloadBlob(
-        taggedBlob,
-        filename
-      );
+      /* 4. Download a genuine MP3, never an M4A renamed as MP3. */
+      downloadBlob(writer.getBlob(), filename);
     } catch (error) {
-      console.warn(
-        "Metadata download failed. Falling back to original MP3:",
-        error
+      console.error("MP3 download/conversion failed:", error);
+
+      alert(
+        "MP3 conversion failed. Please check the audio URL/CORS settings and try again."
       );
-
-      // A browser cannot embed ID3 metadata when the remote MP3 does not
-      // allow CORS. In that case, download the original file instead.
-      try {
-        const response = await fetch(url, {
-          mode: "cors",
-          credentials: "omit",
-        });
-
-        if (!response.ok) {
-          throw new Error(
-            `HTTP ${response.status}`
-          );
-        }
-
-        const blob =
-          await response.blob();
-
-        downloadBlob(blob, filename);
-      } catch (fallbackError) {
-        console.warn(
-          "Blob download failed; opening source URL:",
-          fallbackError
-        );
-
-        const link =
-          document.createElement("a");
-
-        link.href = url;
-        link.download = filename;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
-      }
     } finally {
       setIsDownloading(false);
     }
