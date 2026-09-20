@@ -29,6 +29,8 @@ import {
 
 import { MdDownload } from "react-icons/md";
 
+import { ID3Writer } from "browser-id3-writer";
+
 import { CiMaximize1 } from "react-icons/ci";
 
 import {
@@ -223,7 +225,6 @@ const Player = () => {
     toggleShuffle,
     repeatMode,
     toggleRepeatMode,
-    downloadSong,
     lyrics,
     coverImage,
   } = useContext(MusicContext) || {};
@@ -299,6 +300,9 @@ const Player = () => {
 
   const [suggestions, setSuggestions] =
     useState([]);
+
+  const [isDownloading, setIsDownloading] =
+    useState(false);
 
   /* =======================================================
      LIKED SONGS
@@ -1169,48 +1173,188 @@ const Player = () => {
   };
 
   /* =======================================================
-     DOWNLOAD
+     DOWNLOAD MP3 WITH ID3 METADATA
+     - Song title
+     - Artist name
+     - Album name
+     - Album cover artwork
+     - Falls back to the original MP3 when tagging is blocked
+       by remote-server CORS restrictions.
   ======================================================= */
 
-  const handleDownload =
-    async () => {
-      if (
-        typeof downloadSong ===
-        "function"
-      ) {
+  const handleDownload = async () => {
+    if (isDownloading) {
+      return;
+    }
+
+    const url =
+      audio?.currentSrc ||
+      audio?.src ||
+      currentSong?.audioUrl ||
+      currentSong?.downloadUrl;
+
+    if (!url) {
+      alert("Download URL is not available.");
+      return;
+    }
+
+    const title =
+      safeDecode(songName).trim() ||
+      "Unknown Song";
+
+    const artist =
+      safeDecode(artistNames).trim() ||
+      "Unknown Artist";
+
+    const album =
+      safeDecode(
+        detail?.album?.name ||
+          currentSong?.album?.name ||
+          currentSong?.albumName ||
+          "MusicMax"
+      ).trim() ||
+      "MusicMax";
+
+    const filename =
+      `${title} - ${artist}.mp3`
+        .replace(/[\\/:*?"<>|]/g, "_")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const downloadBlob = (blob, name) => {
+      const objectUrl =
+        URL.createObjectURL(blob);
+
+      const link =
+        document.createElement("a");
+
+      link.href = objectUrl;
+      link.download = name;
+      link.style.display = "none";
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.setTimeout(() => {
+        URL.revokeObjectURL(objectUrl);
+      }, 1500);
+    };
+
+    const dataUrlToArrayBuffer = (dataUrl) => {
+      const match =
+        String(dataUrl).match(
+          /^data:([^;,]+)?(;base64)?,(.*)$/s
+        );
+
+      if (!match) {
+        return null;
+      }
+
+      const isBase64 = Boolean(match[2]);
+      const data = match[3] || "";
+
+      if (isBase64) {
+        const binary = atob(data);
+        const bytes = new Uint8Array(binary.length);
+
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+
+        return bytes.buffer;
+      }
+
+      return new TextEncoder().encode(
+        decodeURIComponent(data)
+      ).buffer;
+    };
+
+    const getArrayBuffer = async (resourceUrl) => {
+      if (!resourceUrl) {
+        throw new Error("Resource URL is empty.");
+      }
+
+      if (String(resourceUrl).startsWith("data:")) {
+        const buffer = dataUrlToArrayBuffer(resourceUrl);
+
+        if (!buffer) {
+          throw new Error("Invalid data URL.");
+        }
+
+        return buffer;
+      }
+
+      const response = await fetch(resourceUrl, {
+        mode: "cors",
+        credentials: "omit",
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `HTTP ${response.status} while fetching resource.`
+        );
+      }
+
+      return response.arrayBuffer();
+    };
+
+    setIsDownloading(true);
+
+    try {
+      const audioBuffer =
+        await getArrayBuffer(url);
+
+      const writer =
+        new ID3Writer(audioBuffer);
+
+      writer
+        .setFrame("TIT2", title)
+        .setFrame("TPE1", [artist])
+        .setFrame("TALB", album);
+
+      // Album artwork is optional: if the image server blocks CORS,
+      // the MP3 will still receive title/artist/album metadata.
+      if (artwork && artwork !== FALLBACK_IMAGE) {
         try {
-          await downloadSong();
-          return;
-        } catch (error) {
+          const coverBuffer =
+            await getArrayBuffer(artwork);
+
+          writer.setFrame("APIC", {
+            type: 3,
+            data: coverBuffer,
+            description: "Album Cover",
+          });
+        } catch (coverError) {
           console.warn(
-            "Context download failed:",
-            error
+            "Album cover metadata could not be embedded:",
+            coverError
           );
         }
       }
 
-      const url =
-        audio?.currentSrc ||
-        audio?.src ||
-        currentSong?.audioUrl;
+      writer.addTag();
 
-      if (!url) {
-        alert(
-          "Download URL is not available."
-        );
+      const taggedBlob =
+        writer.getBlob();
 
-        return;
-      }
+      downloadBlob(
+        taggedBlob,
+        filename
+      );
+    } catch (error) {
+      console.warn(
+        "Metadata download failed. Falling back to original MP3:",
+        error
+      );
 
-      const filename =
-        `${songName || "song"}.mp3`.replace(
-          /[\\/:*?"<>|]/g,
-          "_"
-        );
-
+      // A browser cannot embed ID3 metadata when the remote MP3 does not
+      // allow CORS. In that case, download the original file instead.
       try {
-        const response =
-          await fetch(url);
+        const response = await fetch(url, {
+          mode: "cors",
+          credentials: "omit",
+        });
 
         if (!response.ok) {
           throw new Error(
@@ -1221,70 +1365,29 @@ const Player = () => {
         const blob =
           await response.blob();
 
-        const objectUrl =
-          URL.createObjectURL(
-            blob
-          );
-
-        const link =
-          document.createElement(
-            "a"
-          );
-
-        link.href =
-          objectUrl;
-
-        link.download =
-          filename;
-
-        document.body.appendChild(
-          link
-        );
-
-        link.click();
-
-        link.remove();
-
-        setTimeout(
-          () => {
-            URL.revokeObjectURL(
-              objectUrl
-            );
-          },
-          1000
-        );
-      } catch (error) {
+        downloadBlob(blob, filename);
+      } catch (fallbackError) {
         console.warn(
-          "Direct download failed:",
-          error
+          "Blob download failed; opening source URL:",
+          fallbackError
         );
 
         const link =
-          document.createElement(
-            "a"
-          );
+          document.createElement("a");
 
-        link.href =
-          url;
+        link.href = url;
+        link.download = filename;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
 
-        link.download =
-          filename;
-
-        link.target =
-          "_blank";
-
-        link.rel =
-          "noopener";
-
-        document.body.appendChild(
-          link
-        );
-
+        document.body.appendChild(link);
         link.click();
-
         link.remove();
       }
-    };
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   /* =======================================================
      NO SONG
@@ -2174,7 +2277,12 @@ const Player = () => {
                   onClick={
                     handleDownload
                   }
-                  title="Download"
+                  disabled={isDownloading}
+                  title={
+                    isDownloading
+                      ? "Downloading..."
+                      : "Download MP3"
+                  }
                   className="
                     rounded-full
                     p-2
@@ -2185,7 +2293,13 @@ const Player = () => {
                     hover:opacity-100
                   "
                 >
-                  <MdDownload className="text-2xl" />
+                  <MdDownload
+                    className={`text-2xl ${
+                      isDownloading
+                        ? "animate-pulse opacity-50"
+                        : ""
+                    }`}
+                  />
                 </button>
               </div>
 
