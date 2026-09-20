@@ -1669,6 +1669,72 @@ const Player = () => {
                 items-center
               "
             >
+              {/* NAVBAR */}
+
+              <nav
+                className={`
+                  sticky
+                  top-0
+                  z-50
+                  mb-4
+                  flex
+                  w-full
+                  items-center
+                  justify-between
+                  rounded-2xl
+                  border
+                  px-3
+                  py-2.5
+                  shadow-xl
+                  backdrop-blur-2xl
+                  ${softPanelClass}
+                `}
+                aria-label="Player navigation"
+              >
+                <Link
+                  to="/"
+                  className="flex min-w-0 items-center gap-2 rounded-xl px-2 py-1.5 transition hover:bg-white/10"
+                  aria-label="MusicMax home"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500 font-black text-white shadow-lg shadow-red-500/25">
+                    M
+                  </div>
+                  <span className="hidden truncate text-sm font-extrabold tracking-tight sm:block">
+                    MusicMax
+                  </span>
+                </Link>
+
+                <div className="flex items-center gap-1 sm:gap-2">
+                  <Link
+                    to="/"
+                    className="rounded-xl px-3 py-2 text-xs font-semibold transition hover:bg-white/10 sm:text-sm"
+                  >
+                    Home
+                  </Link>
+                  <Link
+                    to="/search"
+                    className="rounded-xl px-3 py-2 text-xs font-semibold transition hover:bg-white/10 sm:text-sm"
+                  >
+                    Search
+                  </Link>
+                  <Link
+                    to="/library"
+                    className="hidden rounded-xl px-3 py-2 text-xs font-semibold transition hover:bg-white/10 sm:block sm:text-sm"
+                  >
+                    Library
+                  </Link>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setIsMaximized(false)}
+                  className="rounded-xl border px-3 py-2 text-xs font-semibold transition hover:bg-white/10 sm:text-sm"
+                  aria-label="Close player"
+                >
+                  Close
+                </button>
+              </nav>
+
               {/* HEADER */}
 
               <div
