@@ -9,7 +9,6 @@ import {
 import {
   IoMdSkipBackward,
   IoMdSkipForward,
-  IoIosClose,
 } from "react-icons/io";
 
 import { IoShareSocial } from "react-icons/io5";
@@ -29,9 +28,6 @@ import {
 } from "react-icons/fa";
 
 import { MdDownload } from "react-icons/md";
-
-import { ID3Writer } from "browser-id3-writer";
-import { Mp3Encoder } from "@breezystack/lamejs";
 
 import { CiMaximize1 } from "react-icons/ci";
 
@@ -227,6 +223,7 @@ const Player = () => {
     toggleShuffle,
     repeatMode,
     toggleRepeatMode,
+    downloadSong,
     lyrics,
     coverImage,
   } = useContext(MusicContext) || {};
@@ -302,9 +299,6 @@ const Player = () => {
 
   const [suggestions, setSuggestions] =
     useState([]);
-
-  const [isDownloading, setIsDownloading] =
-    useState(false);
 
   /* =======================================================
      LIKED SONGS
@@ -1175,311 +1169,122 @@ const Player = () => {
   };
 
   /* =======================================================
-     DOWNLOAD — ALWAYS CREATE A REAL MP3
-     Source can be M4A/AAC or MP3.
-     M4A/AAC is decoded with Web Audio and re-encoded to MP3.
-     ID3 metadata + front album artwork are then embedded.
+     DOWNLOAD
   ======================================================= */
 
-  const handleDownload = async () => {
-    if (isDownloading) {
-      return;
-    }
-
-    const url =
-      audio?.currentSrc ||
-      audio?.src ||
-      currentSong?.audioUrl ||
-      currentSong?.downloadUrl;
-
-    if (!url) {
-      alert("Download URL is not available.");
-      return;
-    }
-
-    const title =
-      safeDecode(songName).trim() ||
-      "Unknown Song";
-
-    const artist =
-      safeDecode(artistNames).trim() ||
-      "Unknown Artist";
-
-    const album =
-      safeDecode(
-        detail?.album?.name ||
-          currentSong?.album?.name ||
-          currentSong?.albumName ||
-          "MusicMax"
-      ).trim() || "MusicMax";
-
-    const filename =
-      `${title} - ${artist}.mp3`
-        .replace(/[\\/:*?"<>|]/g, "_")
-        .replace(/\s+/g, " ")
-        .trim();
-
-    const downloadBlob = (blob, name) => {
-      const objectUrl = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-
-      link.href = objectUrl;
-      link.download = name;
-      link.style.display = "none";
-
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-
-      window.setTimeout(() => {
-        URL.revokeObjectURL(objectUrl);
-      }, 3000);
-    };
-
-    const dataUrlToArrayBuffer = (dataUrl) => {
-      const match = String(dataUrl).match(
-        /^data:([^;,]+)?(;base64)?,(.*)$/s
-      );
-
-      if (!match) {
-        return null;
-      }
-
-      const isBase64 = Boolean(match[2]);
-      const data = match[3] || "";
-
-      if (isBase64) {
-        const binary = atob(data);
-        const bytes = new Uint8Array(binary.length);
-
-        for (let index = 0; index < binary.length; index += 1) {
-          bytes[index] = binary.charCodeAt(index);
+  const handleDownload =
+    async () => {
+      if (
+        typeof downloadSong ===
+        "function"
+      ) {
+        try {
+          await downloadSong();
+          return;
+        } catch (error) {
+          console.warn(
+            "Context download failed:",
+            error
+          );
         }
-
-        return bytes.buffer;
       }
 
-      return new TextEncoder()
-        .encode(decodeURIComponent(data))
-        .buffer;
-    };
+      const url =
+        audio?.currentSrc ||
+        audio?.src ||
+        currentSong?.audioUrl;
 
-    const getArrayBuffer = async (resourceUrl) => {
-      if (!resourceUrl) {
-        throw new Error("Resource URL is empty.");
-      }
-
-      if (String(resourceUrl).startsWith("data:")) {
-        const buffer = dataUrlToArrayBuffer(resourceUrl);
-
-        if (!buffer) {
-          throw new Error("Invalid data URL.");
-        }
-
-        return buffer;
-      }
-
-      const response = await fetch(resourceUrl, {
-        mode: "cors",
-        credentials: "omit",
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `HTTP ${response.status} while fetching resource.`
+      if (!url) {
+        alert(
+          "Download URL is not available."
         );
+
+        return;
       }
 
-      return response.arrayBuffer();
-    };
-
-    /* Convert ANY browser-decodable audio (M4A/AAC/MP3/etc.) to real MP3. */
-    const convertAudioToMp3 = async (sourceBuffer) => {
-      const AudioContextClass =
-        window.AudioContext ||
-        window.webkitAudioContext;
-
-      if (!AudioContextClass) {
-        throw new Error(
-          "Web Audio is not supported by this browser."
+      const filename =
+        `${songName || "song"}.mp3`.replace(
+          /[\\/:*?"<>|]/g,
+          "_"
         );
-      }
-
-      const audioContext = new AudioContextClass();
 
       try {
-        const decoded = await audioContext.decodeAudioData(
-          sourceBuffer.slice(0)
-        );
+        const response =
+          await fetch(url);
 
-        const targetSampleRate = 44100;
-        let rendered = decoded;
-
-        /* Normalize to 44.1 kHz for broad MP3 compatibility. */
-        if (decoded.sampleRate !== targetSampleRate) {
-          const frameCount = Math.ceil(
-            decoded.duration * targetSampleRate
+        if (!response.ok) {
+          throw new Error(
+            `HTTP ${response.status}`
           );
-
-          const offlineContext = new OfflineAudioContext(
-            decoded.numberOfChannels,
-            frameCount,
-            targetSampleRate
-          );
-
-          const source = offlineContext.createBufferSource();
-          source.buffer = decoded;
-          source.connect(offlineContext.destination);
-          source.start(0);
-
-          rendered = await offlineContext.startRendering();
         }
 
-        const channels = Math.min(
-          2,
-          Math.max(1, rendered.numberOfChannels)
+        const blob =
+          await response.blob();
+
+        const objectUrl =
+          URL.createObjectURL(
+            blob
+          );
+
+        const link =
+          document.createElement(
+            "a"
+          );
+
+        link.href =
+          objectUrl;
+
+        link.download =
+          filename;
+
+        document.body.appendChild(
+          link
         );
 
-        const leftFloat = rendered.getChannelData(0);
-        const rightFloat =
-          channels === 2
-            ? rendered.getChannelData(1)
-            : leftFloat;
+        link.click();
 
-        const left = new Int16Array(leftFloat.length);
-        const right = new Int16Array(rightFloat.length);
+        link.remove();
 
-        for (let index = 0; index < leftFloat.length; index += 1) {
-          const leftSample = Math.max(
-            -1,
-            Math.min(1, leftFloat[index])
-          );
-
-          const rightSample = Math.max(
-            -1,
-            Math.min(1, rightFloat[index])
-          );
-
-          left[index] =
-            leftSample < 0
-              ? Math.round(leftSample * 32768)
-              : Math.round(leftSample * 32767);
-
-          right[index] =
-            rightSample < 0
-              ? Math.round(rightSample * 32768)
-              : Math.round(rightSample * 32767);
-        }
-
-        const encoder = new Mp3Encoder(
-          channels,
-          targetSampleRate,
-          192
-        );
-
-        const mp3Parts = [];
-        const blockSize = 1152;
-
-        for (
-          let offset = 0;
-          offset < left.length;
-          offset += blockSize
-        ) {
-          const leftChunk = left.subarray(
-            offset,
-            Math.min(offset + blockSize, left.length)
-          );
-
-          let encoded;
-
-          if (channels === 2) {
-            const rightChunk = right.subarray(
-              offset,
-              Math.min(offset + blockSize, right.length)
+        setTimeout(
+          () => {
+            URL.revokeObjectURL(
+              objectUrl
             );
+          },
+          1000
+        );
+      } catch (error) {
+        console.warn(
+          "Direct download failed:",
+          error
+        );
 
-            encoded = encoder.encodeBuffer(
-              leftChunk,
-              rightChunk
-            );
-          } else {
-            encoded = encoder.encodeBuffer(leftChunk);
-          }
+        const link =
+          document.createElement(
+            "a"
+          );
 
-          if (encoded?.length) {
-            mp3Parts.push(new Int8Array(encoded));
-          }
-        }
+        link.href =
+          url;
 
-        const flushed = encoder.flush();
+        link.download =
+          filename;
 
-        if (flushed?.length) {
-          mp3Parts.push(new Int8Array(flushed));
-        }
+        link.target =
+          "_blank";
 
-        if (!mp3Parts.length) {
-          throw new Error("MP3 encoder produced no audio data.");
-        }
+        link.rel =
+          "noopener";
 
-        return new Blob(mp3Parts, {
-          type: "audio/mpeg",
-        });
-      } finally {
-        try {
-          await audioContext.close();
-        } catch {}
+        document.body.appendChild(
+          link
+        );
+
+        link.click();
+
+        link.remove();
       }
     };
-
-    setIsDownloading(true);
-
-    try {
-      /* 1. Download source M4A/AAC/MP3. */
-      const sourceBuffer = await getArrayBuffer(url);
-
-      /* 2. ALWAYS produce a real MPEG/MP3 file. */
-      const mp3Blob = await convertAudioToMp3(sourceBuffer);
-      const mp3Buffer = await mp3Blob.arrayBuffer();
-
-      /* 3. Add title, artist, album and album cover to the MP3. */
-      const writer = new ID3Writer(mp3Buffer);
-
-      writer
-        .setFrame("TIT2", title)
-        .setFrame("TPE1", [artist])
-        .setFrame("TALB", album);
-
-      if (artwork && artwork !== FALLBACK_IMAGE) {
-        try {
-          const coverBuffer = await getArrayBuffer(artwork);
-
-          writer.setFrame("APIC", {
-            type: 3,
-            data: coverBuffer,
-            description: "Album Cover",
-          });
-        } catch (coverError) {
-          console.warn(
-            "Album cover could not be embedded:",
-            coverError
-          );
-        }
-      }
-
-      writer.addTag();
-
-      /* 4. Download a genuine MP3, never an M4A renamed as MP3. */
-      downloadBlob(writer.getBlob(), filename);
-    } catch (error) {
-      console.error("MP3 download/conversion failed:", error);
-
-      alert(
-        "MP3 conversion failed. Please check the audio URL/CORS settings and try again."
-      );
-    } finally {
-      setIsDownloading(false);
-    }
-  };
 
   /* =======================================================
      NO SONG
@@ -1633,7 +1438,7 @@ const Player = () => {
             z-10
             ${
               isMaximized
-                ? "h-full overflow-y-auto px-3 pb-8 pt-0 sm:px-6 sm:pb-10"
+                ? "h-full overflow-y-auto p-3 sm:p-6"
                 : "p-3 lg:px-6"
             }
           `}
@@ -1864,35 +1669,77 @@ const Player = () => {
                 items-center
               "
             >
-              {/* CLOSE BUTTON - NO TOP NAVBAR */}
+              {/* HEADER */}
 
-              <button
-                type="button"
-                onClick={() => setIsMaximized(false)}
-                title="Close"
-                aria-label="Close player"
+              <div
                 className="
-                  absolute
-                  right-3
-                  top-3
-                  z-[100]
                   flex
-                  h-12
-                  w-12
+                  w-full
                   items-center
-                  justify-center
-                  rounded-full
-                  text-white
-                  transition
-                  hover:bg-white/10
-                  hover:scale-105
-                  active:scale-95
-                  sm:right-5
-                  sm:top-5
+                  justify-between
                 "
               >
-                <IoIosClose className="text-5xl" />
-              </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setIsMaximized(
+                      false
+                    )
+                  }
+                  className={`
+                    rounded-full
+                    border
+                    px-4
+                    py-2
+                    text-sm
+                    font-medium
+                    backdrop-blur-xl
+                    transition
+                    hover:bg-white/10
+                    ${softPanelClass}
+                  `}
+                >
+                  ↓ Minimize
+                </button>
+
+                <div
+                  className="
+                    flex
+                    items-center
+                    gap-2
+                  "
+                >
+                  <span
+                    className={`
+                      hidden
+                      text-xs
+                      font-semibold
+                      tracking-[0.2em]
+                      sm:block
+                      ${mutedTextClass}
+                    `}
+                  >
+                    NOW PLAYING
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={share}
+                    title="Share"
+                    className={`
+                      rounded-full
+                      border
+                      p-2.5
+                      backdrop-blur-xl
+                      transition
+                      hover:bg-white/10
+                      ${softPanelClass}
+                    `}
+                  >
+                    <IoShareSocial className="text-xl" />
+                  </button>
+                </div>
+              </div>
 
               {/* COVER / LYRICS */}
 
@@ -1900,15 +1747,12 @@ const Player = () => {
                 <div
                   className="
                     flex
+                    min-h-[38vh]
+                    flex-1
                     w-full
-                    shrink-0
-                    items-start
+                    items-center
                     justify-center
-                    px-1
-                    pb-2
-                    pt-3
-                    sm:pt-4
-                    md:pt-5
+                    py-5
                   "
                 >
                   <div className="relative">
@@ -1917,8 +1761,8 @@ const Player = () => {
                         absolute
                         inset-0
                         scale-90
-                        rounded-[2.5rem]
-                        bg-red-500/25
+                        rounded-[2rem]
+                        bg-red-500/20
                         blur-3xl
                       "
                     />
@@ -1931,21 +1775,21 @@ const Player = () => {
                       alt={songName}
                       className="
                         relative
-                        h-[260px]
-                        w-[260px]
-                        rounded-[2rem]
+                        h-52
+                        w-52
+                        rounded-[1.75rem]
                         object-cover
-                        shadow-[0_30px_100px_rgba(0,0,0,0.75)]
+                        shadow-[0_30px_100px_rgba(0,0,0,0.7)]
                         ring-1
                         ring-white/10
                         transition-transform
                         duration-700
-                        sm:h-[320px]
-                        sm:w-[320px]
-                        md:h-[380px]
-                        md:w-[380px]
-                        lg:h-[420px]
-                        lg:w-[420px]
+                        sm:h-64
+                        sm:w-64
+                        md:h-72
+                        md:w-72
+                        lg:h-80
+                        lg:w-80
                       "
                       onError={(event) => {
                         event.currentTarget.src =
@@ -1960,24 +1804,21 @@ const Player = () => {
                     lyricContainerRef
                   }
                   className={`
-                    mt-2
-                    h-[48vh]
-                    min-h-[320px]
-                    max-h-[560px]
+                    mt-5
+                    h-[45vh]
+                    min-h-[280px]
                     w-full
-                    max-w-4xl
+                    max-w-3xl
                     overflow-x-hidden
                     overflow-y-auto
                     rounded-3xl
                     border
                     px-3
-                    py-6
+                    py-8
                     shadow-inner
                     backdrop-blur-xl
-                    sm:h-[50vh]
-                    sm:min-h-[360px]
+                    sm:h-[48vh]
                     sm:px-6
-                    md:h-[52vh]
                     ${softPanelClass}
                   `}
                   style={{
@@ -2297,107 +2138,54 @@ const Player = () => {
                 </button>
               </div>
 
-              {/* LIKE / SHARE / DOWNLOAD */}
+              {/* LIKE / DOWNLOAD */}
 
               <div
                 className="
-                  mt-5
+                  mt-4
                   flex
                   items-center
-                  justify-center
-                  gap-3
+                  gap-7
                 "
               >
                 <button
                   type="button"
-                  onClick={toggleLike}
+                  onClick={
+                    toggleLike
+                  }
                   title="Like"
-                  aria-label="Like song"
-                  className={`
-                    flex
-                    h-11
-                    w-11
-                    items-center
-                    justify-center
+                  className="
                     rounded-full
-                    border
-                    backdrop-blur-xl
+                    p-2
                     transition
                     hover:scale-110
                     hover:bg-white/10
-                    active:scale-95
-                    ${softPanelClass}
-                  `}
+                  "
                 >
                   {isLiked ? (
                     <FaHeart className="text-xl text-red-500" />
                   ) : (
-                    <FaRegHeart className="text-xl" />
+                    <FaRegHeart className="text-xl opacity-80" />
                   )}
                 </button>
 
                 <button
                   type="button"
-                  onClick={share}
-                  title="Share"
-                  aria-label="Share song"
-                  className={`
-                    flex
-                    h-11
-                    w-11
-                    items-center
-                    justify-center
-                    rounded-full
-                    border
-                    backdrop-blur-xl
-                    transition
-                    hover:scale-110
-                    hover:bg-white/10
-                    active:scale-95
-                    ${softPanelClass}
-                  `}
-                >
-                  <IoShareSocial className="text-xl" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleDownload}
-                  disabled={isDownloading}
-                  title={
-                    isDownloading
-                      ? "Downloading..."
-                      : "Download MP3"
+                  onClick={
+                    handleDownload
                   }
-                  aria-label="Download MP3"
-                  className={`
-                    flex
-                    h-11
-                    w-11
-                    items-center
-                    justify-center
+                  title="Download"
+                  className="
                     rounded-full
-                    border
-                    backdrop-blur-xl
+                    p-2
+                    opacity-80
                     transition
                     hover:scale-110
                     hover:bg-white/10
-                    active:scale-95
-                    disabled:cursor-not-allowed
-                    disabled:opacity-50
-                    ${softPanelClass}
-                  `}
+                    hover:opacity-100
+                  "
                 >
-                  <MdDownload
-                    className={`
-                      text-2xl
-                      ${
-                        isDownloading
-                          ? "animate-pulse"
-                          : ""
-                      }
-                    `}
-                  />
+                  <MdDownload className="text-2xl" />
                 </button>
               </div>
 
