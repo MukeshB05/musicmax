@@ -29,8 +29,6 @@ import {
 
 import { MdDownload } from "react-icons/md";
 
-import { ID3Writer } from "browser-id3-writer";
-
 import { CiMaximize1 } from "react-icons/ci";
 
 import {
