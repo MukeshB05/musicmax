@@ -197,7 +197,7 @@ const Navbar = () => {
             </div>
           </Link>
 
-          <div className="text-xl pl-6 w-max flex self-center lg:hidden font-semibold">
+          <div className="text-lg pl-6 w-max flex self-center lg:hidden font-semibold">
             {getGreeting()}
           </div>
 
