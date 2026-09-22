@@ -9,6 +9,7 @@ import {
 import {
   IoMdSkipBackward,
   IoMdSkipForward,
+  IoIosClose,
 } from "react-icons/io";
 
 import { IoShareSocial } from "react-icons/io5";
@@ -1653,7 +1654,7 @@ const Player = () => {
             z-10
             ${
               isMaximized
-                ? "h-full overflow-y-auto p-3 sm:p-6"
+                ? "h-full overflow-y-auto px-3 pb-8 pt-24 sm:px-6 sm:pb-10 sm:pt-28"
                 : "p-3 lg:px-6"
             }
           `}
@@ -1860,50 +1861,44 @@ const Player = () => {
               "
             >
               {/* =================================================
-                  HEADER
+                  FLOATING CLOSE BUTTON
+                  No MUSICMAX top navbar
               ================================================= */}
 
-              <div
-                className="
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMaximized(false);
+                  setShowLyrics(false);
+                }}
+                title="Close player"
+                aria-label="Close player"
+                className={`
+                  absolute
+                  right-3
+                  top-14
+                  z-[100]
                   flex
-                  w-full
+                  h-11
+                  w-11
                   items-center
-                  justify-end
-                "
+                  justify-center
+                  rounded-full
+                  border
+                  backdrop-blur-xl
+                  transition-all
+                  duration-200
+                  hover:scale-105
+                  hover:bg-red-500
+                  hover:text-white
+                  active:scale-95
+                  sm:right-5
+                  sm:top-16
+                  ${softPanelClass}
+                `}
               >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsMaximized(
-                      false
-                    );
-
-                    setShowLyrics(
-                      false
-                    );
-                  }}
-                  title="Close"
-                  aria-label="Close player"
-                  className={`
-                    flex
-                    h-10
-                    w-10
-                    items-center
-                    justify-center
-                    rounded-full
-                    border
-                    text-xl
-                    font-medium
-                    backdrop-blur-xl
-                    transition
-                    hover:bg-red-500
-                    hover:text-white
-                    ${softPanelClass}
-                  `}
-                >
-                  ✕
-                </button>
-              </div>
+                <IoIosClose className="text-4xl" />
+              </button>
 
               {/* =================================================
                   COVER / LYRICS
