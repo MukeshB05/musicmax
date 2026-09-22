@@ -340,6 +340,10 @@ const Player = () => {
   const lyricContainerRef =
     useRef(null);
 
+  // Keeps autoplay state across the async queue change.
+  const wasPlayingRef = useRef(Boolean(isPlaying));
+  const autoPlayNextRef = useRef(false);
+
   /* =======================================================
      AUDIO
   ======================================================= */
@@ -509,6 +513,15 @@ const Player = () => {
     ]);
 
   /* =======================================================
+     PLAYBACK STATE
+     Remember whether the user was already listening.
+  ======================================================= */
+
+  useEffect(() => {
+    wasPlayingRef.current = Boolean(isPlaying);
+  }, [isPlaying]);
+
+  /* =======================================================
      RESET SONG
   ======================================================= */
 
@@ -604,11 +617,18 @@ const Player = () => {
     };
 
     const ended = () => {
-      if (
-        repeatMode !== "one"
-      ) {
-        nextSong?.();
+      // Repeat One is handled by HTMLAudioElement.loop.
+      if (repeatMode === "one") {
+        return;
       }
+
+      // Tell the next-song effect to start the new queue item
+      // automatically after MusicContext updates currentSong.
+      if (wasPlayingRef.current) {
+        autoPlayNextRef.current = true;
+      }
+
+      nextSong?.();
     };
 
     audio.addEventListener(
@@ -659,6 +679,63 @@ const Player = () => {
     nextSong,
     repeatMode,
   ]);
+
+  /* =======================================================
+     AUTO PLAY NEXT QUEUE ITEM
+     Works when nextSong() changes currentSong after an
+     album, playlist, search, liked-songs or shuffle queue
+     reaches the end of a track.
+  ======================================================= */
+
+  useEffect(() => {
+    if (
+      !audio ||
+      !autoPlayNextRef.current ||
+      !wasPlayingRef.current
+    ) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const startNext = async () => {
+      try {
+        // Wait until the new source has enough data to play.
+        if (audio.readyState < 2) {
+          await new Promise((resolve) => {
+            const onReady = () => {
+              audio.removeEventListener("canplay", onReady);
+              audio.removeEventListener("loadeddata", onReady);
+              resolve();
+            };
+
+            audio.addEventListener("canplay", onReady, { once: true });
+            audio.addEventListener("loadeddata", onReady, { once: true });
+          });
+        }
+
+        if (cancelled) {
+          return;
+        }
+
+        await audio.play();
+        autoPlayNextRef.current = false;
+        setIsPlaying?.(true);
+      } catch (error) {
+        // Browser autoplay policies can reject play().
+        // Do not leave the queue in a permanently pending state.
+        autoPlayNextRef.current = false;
+        console.warn("Auto-play next song failed:", error);
+        setIsPlaying?.(false);
+      }
+    };
+
+    startNext();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [audio, songId, setIsPlaying]);
 
   /* =======================================================
      REPEAT
